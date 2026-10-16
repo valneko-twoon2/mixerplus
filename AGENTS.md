@@ -13,7 +13,9 @@ sidebar, themes, WebView, or a .NET runtime dependency.
   `src/ui/`: `run` (startup, diagnostics, message loop), `window` (window procedure,
   commands), `tray`, `popup` (open, slide, dismiss), `transition` (view cross-fade),
   `controls`, `views` (mixer and devices), and `presets`.
-- `src/appearance.rs`: native popup rendering and local preview export.
+- `src/appearance.rs`: native popup palette, layout state, and background. Its submodules in
+  `src/appearance/` are `controls` (buttons, sliders, labels), `transition` (captured bitmaps,
+  view cross-fade, local preview export), and `icon` (the generated tray icon).
 - `src/drawing.rs`: DirectWrite text, GDI+ geometry, and icon resampling.
 - `src/about.rs`: About and Credits window in the Settings-app style (application license, bundled crates).
 - `scripts/`: build, validation, harness synchronization, and hook entry points.

@@ -46,7 +46,7 @@ fixed, the tray icon promotion applies to every update.
   writes is `%AppData%\mixerplus\presets.json`; it never records the microphone.
 - `src/audio.rs`: endpoint/session enumeration, volume, mute, and default devices.
 - `src/ui.rs` and `src/ui/`: native tray icon and popup. No main-window UI is included.
-- `src/appearance.rs`: native rendering and application-only preview export.
+- `src/appearance.rs` and `src/appearance/`: native rendering and application-only preview export.
 - `src/drawing.rs`: antialiased text, shapes, and high-quality icon scaling.
 - `src/app.ico`: the application icon, embedded by `src/build.rs` as a resource
   without a resource compiler. Regenerate it with `pwsh -File scripts/make-icon.ps1`
