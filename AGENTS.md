@@ -9,7 +9,10 @@ sidebar, themes, WebView, or a .NET runtime dependency.
 - `src/audio.rs`: Core Audio and the isolated undocumented device-switching ABI.
 - `src/Cargo.toml`: Rust project root; pass `--manifest-path src/Cargo.toml`
   when running Cargo from repository root. Rust settings live under `src/`.
-- `src/ui.rs`: native Win32 tray icon, popup controls, and message loop.
+- `src/ui.rs`: shared types and state of the native Win32 tray popup. Its behavior is in
+  `src/ui/`: `run` (startup, diagnostics, message loop), `window` (window procedure,
+  commands), `tray`, `popup` (open, slide, dismiss), `transition` (view cross-fade),
+  `controls`, `views` (mixer and devices), and `presets`.
 - `src/appearance.rs`: native popup rendering and local preview export.
 - `src/drawing.rs`: DirectWrite text, GDI+ geometry, and icon resampling.
 - `src/about.rs`: About and Credits window in the Settings-app style (application license, bundled crates).

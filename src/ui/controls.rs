@@ -1,0 +1,382 @@
+//! Creating, pooling, and updating the popup's child controls.
+
+use super::*;
+
+fn endpoint_glyph(input: bool, level: i32, muted: bool) -> u16 {
+    match (input, muted, level) {
+        (true, true, _) => MICROPHONE_OFF,
+        (true, false, _) => MICROPHONE,
+        (false, true, _) => MUTED,
+        (false, false, 0) => 0xe992,
+        (false, false, 1..=33) => 0xe993,
+        (false, false, 34..=66) => 0xe994,
+        _ => 0xe995,
+    }
+}
+
+impl App {
+    fn child(
+        &mut self,
+        class: Class,
+        text: &str,
+        id: usize,
+        rect: [i32; 4],
+        style: WINDOW_STYLE,
+        font: HFONT,
+    ) -> Result<HWND> {
+        if let Some(index) = self.spare.iter().position(|(c, _)| *c == class) {
+            let (_, hwnd) = self.spare.swap_remove(index);
+            unsafe {
+                SetWindowLongPtrW(hwnd, GWLP_ID, id as isize);
+                if class == Class::Static {
+                    // Labels differ only in alignment, which their paint subclass reads.
+                    let current = GetWindowLongW(hwnd, GWL_STYLE) as u32;
+                    let next = current & !SS_CENTER.0 | style.0 & SS_CENTER.0;
+                    SetWindowLongW(hwnd, GWL_STYLE, next as i32);
+                }
+                SendMessageW(
+                    hwnd,
+                    WM_SETFONT,
+                    Some(WPARAM(font.0 as usize)),
+                    Some(LPARAM(0)),
+                );
+                set_text(hwnd, text);
+                // The bottom of the z-order is where a new window goes, so tab order
+                // stays the creation order.
+                SetWindowPos(
+                    hwnd,
+                    Some(HWND_BOTTOM),
+                    self.px(rect[0]),
+                    self.px(rect[1]),
+                    self.px(rect[2]),
+                    self.px(rect[3]),
+                    SWP_NOACTIVATE,
+                )?;
+                // SWP_SHOWWINDOW and WS_VISIBLE at creation take a far slower path.
+                let _ = ShowWindow(hwnd, SW_SHOWNA);
+            }
+            self.children.push(hwnd);
+            return Ok(hwnd);
+        }
+        let text = wide(text);
+        unsafe {
+            let hwnd = CreateWindowExW(
+                WINDOW_EX_STYLE(0),
+                class.name(),
+                PCWSTR(text.as_ptr()),
+                WS_CHILD | style,
+                self.px(rect[0]),
+                self.px(rect[1]),
+                self.px(rect[2]),
+                self.px(rect[3]),
+                Some(self.hwnd),
+                Some(HMENU(id as *mut _)),
+                None,
+                None,
+            )?;
+            SendMessageW(
+                hwnd,
+                WM_SETFONT,
+                Some(WPARAM(font.0 as usize)),
+                // Without a redraw, a static cannot paint and validate itself before
+                // its custom painting subclass is installed.
+                Some(LPARAM(0)),
+            );
+            let _ = ShowWindow(hwnd, SW_SHOWNA);
+            self.children.push(hwnd);
+            Ok(hwnd)
+        }
+    }
+
+    pub(super) fn label(
+        &mut self,
+        text: &str,
+        rect: [i32; 4],
+        font: HFONT,
+        style: isize,
+    ) -> Result<HWND> {
+        let hwnd = self.child(
+            Class::Static,
+            text,
+            0,
+            rect,
+            WINDOW_STYLE(SS_NOPREFIX.0 | if style == SECONDARY { SS_CENTER.0 } else { 0 }),
+            font,
+        )?;
+        unsafe { crate::appearance::install_label(hwnd, style)? };
+        Ok(hwnd)
+    }
+
+    pub(super) fn button(
+        &mut self,
+        text: &str,
+        id: usize,
+        rect: [i32; 4],
+        font: HFONT,
+        data: isize,
+    ) -> Result<HWND> {
+        let hwnd = self.child(
+            Class::Button,
+            text,
+            id,
+            rect,
+            WS_TABSTOP | WINDOW_STYLE(BS_OWNERDRAW as u32),
+            font,
+        )?;
+        unsafe { crate::appearance::install_button(hwnd, data)? };
+        Ok(hwnd)
+    }
+
+    pub(super) fn tool(&self, message: u32, tool: HWND, text: &str) {
+        let mut text = wide(text);
+        let info = TTTOOLINFOW {
+            cbSize: size_of::<TTTOOLINFOW>() as u32,
+            uFlags: TTF_IDISHWND | TTF_SUBCLASS,
+            hwnd: self.hwnd,
+            uId: tool.0 as usize,
+            lpszText: PWSTR(text.as_mut_ptr()),
+            ..Default::default()
+        };
+        unsafe {
+            SendMessageW(
+                self.tooltip,
+                message,
+                None,
+                Some(LPARAM(&info as *const TTTOOLINFOW as isize)),
+            );
+        }
+    }
+
+    pub(super) fn slider(&mut self, id: usize, rect: [i32; 4]) -> Result<HWND> {
+        let slider = self.child(
+            Class::Trackbar,
+            "",
+            id,
+            rect,
+            WS_TABSTOP | WINDOW_STYLE(TBS_NOTICKS | TBS_TRANSPARENTBKGND),
+            self.fonts.body,
+        )?;
+        unsafe {
+            SendMessageW(
+                slider,
+                TBM_SETRANGE,
+                Some(WPARAM(0)),
+                Some(LPARAM(100 << 16)),
+            );
+            SendMessageW(slider, TBM_SETPAGESIZE, None, Some(LPARAM(10)));
+            crate::appearance::install_slider(slider)?;
+        }
+        Ok(slider)
+    }
+
+    pub(super) fn add_control(
+        &mut self,
+        row: Row,
+        [slider, mute, value]: [HWND; 3],
+        kind: Kind,
+        icon: HICON,
+    ) {
+        self.tool(TTM_ADDTOOLW, slider, &row.name);
+        self.tool(TTM_ADDTOOLW, mute, &row.name);
+        self.controls.push(Control {
+            row,
+            slider,
+            mute,
+            kind,
+            value,
+            icon,
+            tip: String::new(),
+            peak: 0.0,
+            muted: false,
+        });
+        self.update_control(self.controls.len() - 1);
+    }
+
+    /// An inline name box over `rect` (logical pixels), with its rounded frame.
+    pub(super) fn name_box(&mut self, rect: [i32; 4], text: &str) -> Result<HWND> {
+        let edit = self.child(
+            Class::Edit,
+            text,
+            EDIT_ID,
+            [rect[0] + 12, rect[1] + 8, rect[2] - 24, rect[3] - 16],
+            WS_TABSTOP | WINDOW_STYLE(ES_AUTOHSCROLL_STYLE),
+            self.fonts.body,
+        )?;
+        unsafe {
+            SendMessageW(edit, EM_SETLIMITTEXT, Some(WPARAM(64)), None);
+            SendMessageW(edit, EM_SETSEL, Some(WPARAM(0)), Some(LPARAM(-1)));
+        }
+        crate::appearance::set_edit_frame(Some(RECT {
+            left: self.px(rect[0]),
+            top: self.px(rect[1]),
+            right: self.px(rect[0] + rect[2]),
+            bottom: self.px(rect[1] + rect[3]),
+        }));
+        Ok(edit)
+    }
+
+    pub(super) fn build_chrome(&mut self) -> Result<()> {
+        let small = self.fonts.small;
+        let icon = self.fonts.icon;
+        let previous = self.button(
+            "\u{e76b}",
+            PREVIOUS,
+            [8, 0, 40, 32],
+            icon,
+            pack(GLYPH, 0, false),
+        )?;
+        let label = self.label("", [56, 0, 248, 32], small, SECONDARY)?;
+        let next = self.button(
+            "\u{e76c}",
+            NEXT,
+            [312, 0, 40, 32],
+            icon,
+            pack(GLYPH, 0, false),
+        )?;
+        self.button(
+            "その他の音量設定",
+            SETTINGS_LINK,
+            [8, 0, 220, 32],
+            small,
+            pack(LINK, 0, false),
+        )?;
+        self.navigation = Some(Navigation {
+            previous,
+            next,
+            label,
+        });
+        self.chrome_count = self.children.len();
+        Ok(())
+    }
+
+    /// Removes the current page's rows; chrome keeps its window identities. Rows are
+    /// hidden for reuse by the next page, since creating and destroying windows
+    /// dominated the cost of switching views.
+    pub(super) fn clear_rows(&mut self) {
+        let rows: Vec<HWND> = self.children[self.chrome_count.min(self.children.len())..].to_vec();
+        for row in &rows {
+            self.tool(TTM_DELTOOLW, *row, "");
+        }
+        self.children
+            .truncate(self.chrome_count.min(self.children.len()));
+        unsafe {
+            let focus = GetFocus();
+            for row in rows {
+                if focus == row {
+                    // As when a focused window is destroyed: no control keeps focus.
+                    let _ = SetFocus(None);
+                }
+                // The clicked button's notification may still be unwinding, so it is
+                // never reused as a different control.
+                match Class::of(row) {
+                    Some(class) if row != self.clicked && self.spare.len() < MAX_SPARE => {
+                        let _ = ShowWindow(row, SW_HIDE);
+                        SetWindowLongPtrW(row, GWLP_ID, 0);
+                        crate::appearance::recycle(row);
+                        self.spare.push((class, row));
+                    }
+                    _ => {
+                        let _ = DestroyWindow(row);
+                    }
+                }
+            }
+        }
+        self.clicked = HWND::default();
+        self.controls.clear();
+        self.devices.clear();
+    }
+
+    /// Shows the pager at `y`, or hides it.
+    pub(super) fn place_navigation(&mut self, y: Option<i32>) {
+        let Some(navigation) = self.navigation else {
+            return;
+        };
+        set_text(
+            navigation.label,
+            &format!("{} / {}", self.page + 1, self.pages),
+        );
+        unsafe {
+            for (hwnd, x, width) in [
+                (navigation.previous, 8, 40),
+                (navigation.label, 56, 248),
+                (navigation.next, 312, 40),
+            ] {
+                let _ = SetWindowPos(
+                    hwnd,
+                    None,
+                    self.px(x),
+                    self.px(y.unwrap_or(0)),
+                    self.px(width),
+                    self.px(32),
+                    SWP_NOZORDER | SWP_NOACTIVATE,
+                );
+                // Far cheaper than SWP_SHOWWINDOW and SWP_HIDEWINDOW.
+                let _ = ShowWindow(hwnd, if y.is_some() { SW_SHOWNA } else { SW_HIDE });
+            }
+            let _ = EnableWindow(navigation.previous, self.page > 0);
+            let _ = EnableWindow(navigation.next, self.page + 1 < self.pages);
+        }
+    }
+
+    pub(super) fn update_control(&mut self, index: usize) {
+        let control = &self.controls[index];
+        let Ok((level, muted)) = control.row.volume.read() else {
+            return;
+        };
+        unsafe {
+            let current = SendMessageW(control.slider, TBM_GETPOS, None, None).0 as i32;
+            if current != level {
+                SendMessageW(
+                    control.slider,
+                    TBM_SETPOS,
+                    Some(WPARAM(1)),
+                    Some(LPARAM(level as isize)),
+                );
+                // The custom track fill spans beyond the thumb rect the trackbar invalidates.
+                let _ = InvalidateRect(Some(control.slider), None, false);
+            }
+            set_text(control.value, &level.to_string());
+            match control.kind {
+                Kind::Endpoint { input } => {
+                    crate::appearance::set_glyph(control.mute, endpoint_glyph(input, level, muted))
+                }
+                Kind::App => crate::appearance::set_flag(control.mute, muted),
+                Kind::Device => {}
+            }
+        }
+        let tip = format!(
+            "{} · {}",
+            control.row.name,
+            if muted {
+                "ミュート".to_owned()
+            } else {
+                format!("{level}%")
+            }
+        );
+        if tip != control.tip {
+            self.tool(TTM_UPDATETIPTEXTW, control.slider, &tip);
+            self.tool(TTM_UPDATETIPTEXTW, control.mute, &tip);
+            self.controls[index].tip = tip;
+        }
+        self.controls[index].muted = muted;
+    }
+
+    /// Moves each slider's peak bar toward the current output level.
+    pub(super) fn tick_meters(&mut self) {
+        for control in &mut self.controls {
+            let level = if control.muted {
+                0.0
+            } else {
+                control.row.peak()
+            };
+            // Let the bar fall gradually so short peaks stay readable.
+            control.peak = level.max(control.peak * 0.8);
+            unsafe {
+                crate::appearance::set_meter(
+                    control.slider,
+                    (control.peak * 1000.0).round() as isize,
+                );
+            }
+        }
+    }
+}

@@ -45,7 +45,7 @@ fixed, the tray icon promotion applies to every update.
   schemas, loading, and saving belong under `src/` as well. The only file mixerplus
   writes is `%AppData%\mixerplus\presets.json`; it never records the microphone.
 - `src/audio.rs`: endpoint/session enumeration, volume, mute, and default devices.
-- `src/ui.rs`: native tray icon and popup. No main-window UI is included.
+- `src/ui.rs` and `src/ui/`: native tray icon and popup. No main-window UI is included.
 - `src/appearance.rs`: native rendering and application-only preview export.
 - `src/drawing.rs`: antialiased text, shapes, and high-quality icon scaling.
 - `src/app.ico`: the application icon, embedded by `src/build.rs` as a resource
