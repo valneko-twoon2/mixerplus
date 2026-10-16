@@ -22,7 +22,10 @@ try {
     } else {
         $base = "https://github.com/$Repo/releases/latest/download"
         Invoke-WebRequest -Uri "$base/mixerplus.exe" -OutFile $download -UseBasicParsing
-        $expected = (Invoke-WebRequest -Uri "$base/mixerplus.exe.sha256" -UseBasicParsing).Content.Trim().ToLower()
+        # GitHub serves release assets as application/octet-stream, so Content can be bytes.
+        $content = (Invoke-WebRequest -Uri "$base/mixerplus.exe.sha256" -UseBasicParsing).Content
+        if ($content -is [byte[]]) { $content = [Text.Encoding]::ASCII.GetString($content) }
+        $expected = $content.Trim().ToLower()
         $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $download).Hash.ToLower()
         if ($expected -ne $actual) { throw 'Checksum mismatch; nothing was installed.' }
         Invoke-WebRequest -Uri "$base/uninstall.ps1" -OutFile $remover -UseBasicParsing
