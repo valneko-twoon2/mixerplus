@@ -30,6 +30,9 @@ usage. Release files contain no PDBs and have no .NET runtime dependency.
 
 ## Releasing
 
+`scripts/set-version.cmd [X.Y.Z]` sets the version in `Cargo.toml`, `Cargo.lock`, and
+`app.manifest` (it asks when no version is given). Commit the result before publishing.
+
 `scripts/publish.ps1` fills `artifacts/` with exactly the release assets (removing anything else):
 `mixerplus.exe`, `mixerplus.exe.sha256`, `install.ps1`, and `uninstall.ps1`.
 Attach everything in `artifacts/` to the GitHub release; the one-line installer
