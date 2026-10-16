@@ -1,9 +1,9 @@
 ---
 name: mixerplus-native-ui
-description: Rules for MixerPlus's Win32 tray icon and popup - child controls, custom painting, text rendering, DPI, keyboard handling, and pagination in src/ui.rs, src/appearance.rs, and src/drawing.rs.
+description: Rules for mixerplus's Win32 tray icon and popup - child controls, custom painting, text rendering, DPI, keyboard handling, and pagination in src/ui.rs, src/appearance.rs, and src/drawing.rs.
 ---
 
-# MixerPlus native UI
+# mixerplus native UI
 
 ## Popup behavior
 
@@ -19,7 +19,7 @@ description: Rules for MixerPlus's Win32 tray icon and popup - child controls, c
 
 - The popup imitates the Windows 11 quick settings audio flyout. Keep that look:
   no gradients or custom themes beyond the system light/dark palette and accent
-  in `appearance.rs`. The volume value beside each slider is a deliberate MixerPlus
+  in `appearance.rs`. The volume value beside each slider is a deliberate mixerplus
   addition.
 - Views: `View::Presets` (see `mixerplus-presets`), `View::Mixer` (endpoint rows with a chevron, then application rows) and
   `View::Devices` (in-popup default-device list with a volume slider per device). View changes are posted as
@@ -59,7 +59,7 @@ description: Rules for MixerPlus's Win32 tray icon and popup - child controls, c
 
 - `about.rs` is one custom-painted top-level window laid out like a Settings page
   (large title, cards on a flat background; no icon or footer). The tray menu opens
-  it on the license (*MixerPlus について*) or on the Credits list (*Credits*); a
+  it on the license (*mixerplus について*) or on the Credits list (*Credits*); a
   crate's license is a third view with a back button. It is owned by a hidden `STATIC`
   window so it has no taskbar button; keep that owner when changing creation.
 - Its scrolling content is rendered once into an offscreen bitmap (`Cache`) and

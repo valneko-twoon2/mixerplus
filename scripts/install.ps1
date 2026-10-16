@@ -1,10 +1,10 @@
-# Installs or updates MixerPlus for the current user. No administrator rights needed.
+# Installs or updates mixerplus for the current user. No administrator rights needed.
 #   irm https://github.com/<owner>/<repo>/releases/latest/download/install.ps1 | iex
 # Parameters (when run as a file): -Repo owner/name, -Directory target folder, and
 # -Source, a local mixerplus.exe to install instead of downloading a release.
 param(
-    [string]$Repo = 'valneko-twoon2/MixerPlus',
-    [string]$Directory = (Join-Path $env:LOCALAPPDATA 'Programs\MixerPlus'),
+    [string]$Repo = 'valneko-twoon2/mixerplus',
+    [string]$Directory = (Join-Path $env:LOCALAPPDATA 'Programs\mixerplus'),
     [string]$Source
 )
 $ErrorActionPreference = 'Stop'
@@ -40,13 +40,13 @@ try {
     Copy-Item -LiteralPath $download -Destination $target -Force
     Copy-Item -LiteralPath $remover -Destination (Join-Path $Directory 'uninstall.ps1') -Force
     # List the app in Settings > Apps; this only touches the current user's hive.
-    $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\MixerPlus'
+    $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\mixerplus'
     $null = New-Item -Path $key -Force
     # Settings > Apps can hide entries without a version, so ask the executable.
     $version = (& $target --version | Out-String).Trim()
     $command = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $Directory 'uninstall.ps1')`" -Directory `"$Directory`""
     $values = @{
-        DisplayName = 'MixerPlus'; DisplayVersion = $version; Publisher = 'MixerPlus'
+        DisplayName = 'mixerplus'; DisplayVersion = $version; Publisher = 'mixerplus'
         InstallLocation = $Directory; DisplayIcon = $target; UninstallString = $command
         InstallDate = (Get-Date -Format 'yyyyMMdd')
     }
@@ -57,13 +57,13 @@ try {
     $size = [int][Math]::Ceiling((Get-Item -LiteralPath $target).Length / 1KB)
     Set-ItemProperty -Path $key -Name EstimatedSize -Value $size -Type DWord
     Set-ItemProperty -Path $key -Name NoRepair -Value 1 -Type DWord
-    # Start at sign-in, so MixerPlus stays in the tray. Presets never apply by themselves.
+    # Start at sign-in, so mixerplus stays in the tray. Presets never apply by themselves.
     $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
-    Set-ItemProperty -Path $run -Name MixerPlus -Value "`"$target`""
-    # The tray icon is promoted next to the system icons by MixerPlus itself, through
+    Set-ItemProperty -Path $run -Name mixerplus -Value "`"$target`""
+    # The tray icon is promoted next to the system icons by mixerplus itself, through
     # Explorer's per-icon registry entry, which is keyed by this fixed path.
     Start-Process -FilePath $target
-    Write-Host "MixerPlus installed to $target"
+    Write-Host "mixerplus installed to $target"
 } finally {
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 }

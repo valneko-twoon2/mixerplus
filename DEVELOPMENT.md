@@ -1,6 +1,6 @@
-# MixerPlus development
+# mixerplus development
 
-Notes for people building or changing MixerPlus. For installing and using it, see [README.md](README.md).
+Notes for people building or changing mixerplus. For installing and using it, see [README.md](README.md).
 
 ## Build and run
 
@@ -9,15 +9,15 @@ Install the stable Rust MSVC toolchain and Visual Studio C++ Build Tools, then:
 ```powershell
 pwsh -File scripts/setup-harness.ps1
 cargo run --config src/.cargo/config.toml --manifest-path src/Cargo.toml --locked
-# Open the popup immediately, including when MixerPlus is already running:
+# Open the popup immediately, including when mixerplus is already running:
 cargo run --config src/.cargo/config.toml --manifest-path src/Cargo.toml --locked -- --show
 # Read-only audio enumeration without starting a tray loop:
 cargo run --config src/.cargo/config.toml --manifest-path src/Cargo.toml --locked -- --check-audio
 # Expose the popup to desktop inspection tools during development:
 cargo run --config src/.cargo/config.toml --manifest-path src/Cargo.toml --locked -- --show --inspect-ui
-# Render only MixerPlus's own controls to a BMP and exit:
+# Render only mixerplus's own controls to a BMP and exit:
 cargo run --config src/.cargo/config.toml --manifest-path src/Cargo.toml --locked -- --snapshot src/target/preview.bmp
-# Read-only native next/previous regression check (exit running MixerPlus first):
+# Read-only native next/previous regression check (exit running mixerplus first):
 cargo run --config src/.cargo/config.toml --manifest-path src/Cargo.toml --locked -- --check-ui
 # Build the standalone release:
 pwsh -File scripts/publish.ps1
@@ -34,7 +34,7 @@ usage. Release files contain no PDBs and have no .NET runtime dependency.
 `mixerplus.exe`, `mixerplus.exe.sha256`, `install.ps1`, and `uninstall.ps1`.
 Attach everything in `artifacts/` to the GitHub release; the one-line installer
 downloads these assets from `releases/latest/download`. `install.ps1` has a
-`-Repo` parameter (default `valneko-twoon2/MixerPlus`); update it and the README URLs if the
+`-Repo` parameter (default `valneko-twoon2/mixerplus`); update it and the README URLs if the
 repository is renamed. The installer registers the sign-in start (`Run` key) and a
 Settings > Apps entry; `uninstall.ps1` removes both. Because the install path is
 fixed, the tray icon promotion applies to every update.
@@ -42,8 +42,8 @@ fixed, the tray icon promotion applies to every update.
 ## Source layout
 
 - `src/config.rs`: application configuration defaults. Future application settings
-  schemas, loading, and saving belong under `src/` as well. The only file MixerPlus
-  writes is `%AppData%\MixerPlus\presets.json`; it never records the microphone.
+  schemas, loading, and saving belong under `src/` as well. The only file mixerplus
+  writes is `%AppData%\mixerplus\presets.json`; it never records the microphone.
 - `src/audio.rs`: endpoint/session enumeration, volume, mute, and default devices.
 - `src/ui.rs`: native tray icon and popup. No main-window UI is included.
 - `src/appearance.rs`: native rendering and application-only preview export.

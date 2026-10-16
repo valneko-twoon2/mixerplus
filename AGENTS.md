@@ -1,6 +1,6 @@
-# MixerPlus agent instructions
+# mixerplus agent instructions
 
-MixerPlus is a Windows 10/11 Rust tray audio mixer. Its only normal UI is a compact
+mixerplus is a Windows 10/11 Rust tray audio mixer. Its only normal UI is a compact
 popup opened from its notification icon. Do not reintroduce a main window,
 sidebar, themes, WebView, or a .NET runtime dependency.
 

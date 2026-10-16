@@ -1,6 +1,6 @@
 //! The About and Credits window, laid out like a Windows 11 Settings page: a large
 //! title, section labels, and rounded cards on the window background. One
-//! custom-painted window shows MixerPlus's own license, the list of bundled crates,
+//! custom-painted window shows mixerplus's own license, the list of bundled crates,
 //! and each crate's license text; none of it touches audio.
 //!
 //! The scrolling content is rendered once into an offscreen bitmap and only copied
@@ -32,7 +32,7 @@ use crate::appearance::{fill, palette, solid_round};
 
 const LICENSE: &str = include_str!("../LICENSE");
 const NOTICES: &str = include_str!("../THIRD-PARTY-NOTICES.txt");
-const CLASS: PCWSTR = w!("MixerPlusAbout");
+const CLASS: PCWSTR = w!("mixerplusAbout");
 
 const VK_BACK: u32 = 0x08;
 const VK_TAB: u32 = 0x09;
@@ -734,7 +734,7 @@ pub fn show(credits: bool) -> Result<()> {
         let hwnd = CreateWindowExW(
             WINDOW_EX_STYLE(0),
             CLASS,
-            w!("MixerPlus"),
+            w!("mixerplus"),
             WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
@@ -1003,7 +1003,7 @@ unsafe fn paint(hwnd: HWND, ui: &mut Ui) {
         };
         let (title, subtitle) = match ui.view {
             View::About => (
-                "MixerPlus について".to_string(),
+                "mixerplus について".to_string(),
                 format!("バージョン {}", env!("CARGO_PKG_VERSION")),
             ),
             View::Credits => (

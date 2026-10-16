@@ -1,9 +1,9 @@
 ---
 name: mixerplus-audio
-description: Rules for MixerPlus Core Audio work - COM lifetime, endpoint and session enumeration, volume, mute, and default-device switching in src/audio.rs.
+description: Rules for mixerplus Core Audio work - COM lifetime, endpoint and session enumeration, volume, mute, and default-device switching in src/audio.rs.
 ---
 
-# MixerPlus audio
+# mixerplus audio
 
 - Keep COM interfaces on their owning initialized UI thread and release them
   before `CoUninitialize`. Free Windows-owned strings and clear PROPVARIANT values.

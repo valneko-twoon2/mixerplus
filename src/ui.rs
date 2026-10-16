@@ -103,7 +103,7 @@ struct Control {
     /// Mute button, or the device list item for device rows.
     mute: HWND,
     kind: Kind,
-    /// Volume value beside the slider, a MixerPlus addition to the shell layout.
+    /// Volume value beside the slider, a mixerplus addition to the shell layout.
     value: HWND,
     icon: HICON,
     tip: String,
@@ -272,7 +272,7 @@ fn set_text(hwnd: HWND, text: &str) {
     }
 }
 
-/// Moves MixerPlus out of the Windows 11 overflow area the first time Explorer records it.
+/// Moves mixerplus out of the Windows 11 overflow area the first time Explorer records it.
 /// Returns true once its entry exists; an existing IsPromoted value is the user's choice.
 fn promote_tray_icon() -> bool {
     let Ok(executable) = std::env::current_exe() else {
@@ -396,7 +396,7 @@ pub fn show_error(message: &str) {
         MessageBoxW(
             None,
             PCWSTR(message.as_ptr()),
-            w!("MixerPlus"),
+            w!("mixerplus"),
             MB_OK | MB_ICONERROR,
         );
     }
@@ -404,18 +404,18 @@ pub fn show_error(message: &str) {
 
 pub fn run() -> Result<()> {
     unsafe {
-        let mutex = CreateMutexW(None, false, w!("Local\\MixerPlus.Tray.Rust"))?;
+        let mutex = CreateMutexW(None, false, w!("Local\\mixerplus.Tray.Rust"))?;
         let already_running = GetLastError() == ERROR_ALREADY_EXISTS;
         if already_running {
             if std::env::args().any(|arg| arg == "--check-ui" || arg == "--snapshot") {
                 let _ = CloseHandle(mutex);
                 return Err(windows::core::Error::new(
                     windows::core::HRESULT(0x80004005u32 as i32),
-                    "Exit MixerPlus before running UI diagnostics.",
+                    "Exit mixerplus before running UI diagnostics.",
                 ));
             }
             if std::env::args().any(|arg| arg == "--show")
-                && let Ok(hwnd) = FindWindowW(w!("MixerPlusTrayPopup"), None)
+                && let Ok(hwnd) = FindWindowW(w!("mixerplusTrayPopup"), None)
             {
                 let _ = PostMessageW(Some(hwnd), TRAY, WPARAM(0), LPARAM(WM_LBUTTONUP as isize));
             }
@@ -478,7 +478,7 @@ unsafe fn run_initialized() -> Result<()> {
         let class = WNDCLASSW {
             lpfnWndProc: Some(window_proc),
             hInstance: instance.into(),
-            lpszClassName: w!("MixerPlusTrayPopup"),
+            lpszClassName: w!("mixerplusTrayPopup"),
             hCursor: LoadCursorW(None, IDC_ARROW)?,
             hbrBackground: GetSysColorBrush(COLOR_WINDOW),
             ..Default::default()
@@ -496,7 +496,7 @@ unsafe fn run_initialized() -> Result<()> {
             },
             class.lpszClassName,
             // Task Manager lists visible windows with a title under the process.
-            if inspect { w!("MixerPlus") } else { w!("") },
+            if inspect { w!("mixerplus") } else { w!("") },
             if inspect {
                 WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_CLIPCHILDREN
             } else {
@@ -735,7 +735,7 @@ fn device_glyph(form: u32, input: bool) -> u16 {
     }
 }
 
-/// MixerPlus's generated tray icon, or the stock audio icon if rendering fails.
+/// mixerplus's generated tray icon, or the stock audio icon if rendering fails.
 fn tray_icon() -> Result<HICON> {
     let size = unsafe { GetSystemMetrics(SM_CXSMICON) };
     if let Some(icon) = crate::appearance::tray_icon(size) {
@@ -809,7 +809,7 @@ impl App {
             hIcon: self.icon,
             ..Default::default()
         };
-        let tip = wide("MixerPlus — 音量ミキサー");
+        let tip = wide("mixerplus — 音量ミキサー");
         // Keep the terminating NUL when a longer tip is ever configured.
         let length = tip.len().min(data.szTip.len());
         data.szTip[..length].copy_from_slice(&tip[..length]);
@@ -2115,7 +2115,7 @@ impl App {
     fn tray_menu(&mut self) -> Result<()> {
         // The menu runs its own message loop, which would stall a sliding popup.
         self.hide_now();
-        let entries = [(2, "MixerPlus について"), (3, "Credits"), (1, "終了")];
+        let entries = [(2, "mixerplus について"), (3, "Credits"), (1, "終了")];
         match self.menu(&entries)? {
             // The About window is created outside the App borrow, from the message loop.
             id @ (2 | 3) => unsafe {
@@ -2422,7 +2422,7 @@ unsafe extern "system" fn window_proc(
             if let Err(error) = result {
                 let _ = ShowWindow(hwnd, SW_HIDE);
                 show_error(&format!(
-                    "The audio operation failed. Reopen MixerPlus to refresh devices.\n\n{error}"
+                    "The audio operation failed. Reopen mixerplus to refresh devices.\n\n{error}"
                 ));
             }
             Some(LRESULT(0))

@@ -59,6 +59,6 @@ fn main() {
         return;
     }
     if let Err(error) = ui::run() {
-        ui::show_error(&format!("MixerPlus could not start.\n\n{error}"));
+        ui::show_error(&format!("mixerplus could not start.\n\n{error}"));
     }
 }

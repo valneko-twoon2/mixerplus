@@ -533,7 +533,7 @@ pub unsafe fn draw_item(item: &DRAWITEMSTRUCT) {
                 );
             }
             APP => {
-                let icon = HICON(GetPropW(hwnd, w!("MixerPlusIcon")).0);
+                let icon = HICON(GetPropW(hwnd, w!("mixerplusIcon")).0);
                 if icon.is_invalid() {
                     draw(icon_font, &glyph, rect, true, color);
                 } else if let Some(canvas) = crate::drawing::Canvas::new(dc) {
@@ -583,7 +583,7 @@ pub unsafe fn install_button(hwnd: HWND, data: isize) -> windows::core::Result<(
 /// Gives an application button its icon; the caller keeps ownership of `icon`.
 pub unsafe fn set_app_icon(hwnd: HWND, icon: HICON) {
     unsafe {
-        let _ = SetPropW(hwnd, w!("MixerPlusIcon"), Some(HANDLE(icon.0)));
+        let _ = SetPropW(hwnd, w!("mixerplusIcon"), Some(HANDLE(icon.0)));
         let _ = InvalidateRect(Some(hwnd), None, false);
     }
 }
@@ -622,7 +622,7 @@ unsafe extern "system" fn button_proc(
         match message {
             WM_ERASEBKGND => return LRESULT(1),
             WM_NCDESTROY => {
-                let _ = RemovePropW(hwnd, w!("MixerPlusIcon"));
+                let _ = RemovePropW(hwnd, w!("mixerplusIcon"));
                 let _ = RemoveWindowSubclass(hwnd, Some(button_proc), 3);
             }
             _ => {}
@@ -648,8 +648,8 @@ unsafe fn subclassed(
 /// Sets a slider's peak level in thousandths, repainting only on change.
 pub unsafe fn set_meter(hwnd: HWND, permille: isize) {
     unsafe {
-        if GetPropW(hwnd, w!("MixerPlusMeter")).0 as isize != permille {
-            let _ = SetPropW(hwnd, w!("MixerPlusMeter"), Some(HANDLE(permille as *mut _)));
+        if GetPropW(hwnd, w!("mixerplusMeter")).0 as isize != permille {
+            let _ = SetPropW(hwnd, w!("mixerplusMeter"), Some(HANDLE(permille as *mut _)));
             let _ = InvalidateRect(Some(hwnd), None, false);
         }
     }
@@ -768,7 +768,7 @@ unsafe extern "system" fn slider_proc(
                 solid_round(dc, track, px(4.0), palette.track);
                 solid_round(dc, RECT { right: x, ..track }, px(4.0), palette.accent);
                 // The peak level, scaled into the filled part like the Settings mixer.
-                let peak = GetPropW(hwnd, w!("MixerPlusMeter")).0 as i64;
+                let peak = GetPropW(hwnd, w!("mixerplusMeter")).0 as i64;
                 let level = ((x - track.left).max(0) as i64 * peak / 1000) as i32;
                 if level > 0 {
                     solid_round(
@@ -810,7 +810,7 @@ unsafe extern "system" fn slider_proc(
                 return LRESULT(0);
             }
             WM_NCDESTROY => {
-                let _ = RemovePropW(hwnd, w!("MixerPlusMeter"));
+                let _ = RemovePropW(hwnd, w!("mixerplusMeter"));
                 let _ = RemoveWindowSubclass(hwnd, Some(slider_proc), 1);
             }
             _ => {}

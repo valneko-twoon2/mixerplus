@@ -1,9 +1,9 @@
 ---
 name: mixerplus-harness
-description: Maintain MixerPlus's agent harness - AGENTS.md, skills and their mirrors, Codex and Claude hooks, Git hooks, and line-ending rules.
+description: Maintain mixerplus's agent harness - AGENTS.md, skills and their mirrors, Codex and Claude hooks, Git hooks, and line-ending rules.
 ---
 
-# MixerPlus harness
+# mixerplus harness
 
 - `AGENTS.md` holds the shared instructions. There is no `CLAUDE.md`.
 - `.agents/skills/` is canonical and `.claude/skills/` mirrors it byte for byte.

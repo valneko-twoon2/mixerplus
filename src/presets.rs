@@ -1,6 +1,6 @@
-//! Volume presets in `%AppData%\MixerPlus\presets.json`.
+//! Volume presets in `%AppData%\mixerplus\presets.json`.
 //!
-//! The file layout matches the earlier .NET version of MixerPlus, so its presets keep
+//! The file layout matches the earlier .NET version of mixerplus, so its presets keep
 //! working; the input-device fields are optional additions. Presets apply to
 //! whichever output is the default, so the file's `DeviceId` is only carried along
 //! for that compatibility.
@@ -158,7 +158,7 @@ impl PresetStore {
                 SHGetKnownFolderPath(&FOLDERID_RoamingAppData, KF_FLAG_CREATE, None).ok()?;
             let path = folder.to_string().ok();
             CoTaskMemFree(Some(folder.0.cast()));
-            Some(PathBuf::from(path?).join("MixerPlus").join("presets.json"))
+            Some(PathBuf::from(path?).join("mixerplus").join("presets.json"))
         }
     }
 

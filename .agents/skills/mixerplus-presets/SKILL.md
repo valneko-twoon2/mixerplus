@@ -1,22 +1,22 @@
 ---
 name: mixerplus-presets
-description: Rules for MixerPlus volume presets - the presets.json format shared with the old .NET version, global scope, favorite labels, applying and capturing levels, and the preset page in the popup.
+description: Rules for mixerplus volume presets - the presets.json format shared with the old .NET version, global scope, favorite labels, applying and capturing levels, and the preset page in the popup.
 ---
 
-# MixerPlus presets
+# mixerplus presets
 
 ## Data
 
-- Presets live in `%AppData%\MixerPlus\presets.json`, a JSON array written by
+- Presets live in `%AppData%\mixerplus\presets.json`, a JSON array written by
   `src/presets.rs` through the small bounded parser in `src/json.rs`. No serde or
   other dependency is used; keep it that way unless a concrete need appears.
 - The layout is the old .NET version's (`Name`, `DeviceId`, `MasterVolume`,
   `IsMasterMuted`, `IsFavorite`, `Settings[ProcessName, Volume, IsMuted]`), so its
-  presets keep working. MixerPlus adds optional `InputDeviceId`, `InputVolume`, and
+  presets keep working. mixerplus adds optional `InputDeviceId`, `InputVolume`, and
   `InputMuted`. Never rename or drop the legacy keys.
 - Presets are global: one list, unique names (saving an existing name replaces it,
   keeping its label). `DeviceId` is kept only so the old version can still read the
-  file; MixerPlus writes the current output there and never uses it. Applying sets the
+  file; mixerplus writes the current output there and never uses it. Applying sets the
   master level on the current default output, never switches device.
 - A favorite (`IsFavorite`) is only a label. It must not affect applying, ordering,
   or anything automatic.
