@@ -102,7 +102,7 @@ fn node(key: &str, value: &[u8], value_length: u16, text: bool, children: &[Vec<
 }
 
 /// Appends a VERSIONINFO resource, so Explorer and Task Manager show the product
-/// name and version instead of the file name.
+/// name (the same as the binary name, `mixerplus`) and version instead of the file name.
 fn version_resource(out: &mut Vec<u8>, copyright: &str) {
     let part = |name: &str| -> u32 { std::env::var(name).unwrap().parse().unwrap() };
     let (major, minor, patch) = (
@@ -131,12 +131,12 @@ fn version_resource(out: &mut Vec<u8>, copyright: &str) {
         fixed.extend_from_slice(&u32::to_le_bytes(value));
     }
     let strings: Vec<Vec<u8>> = [
-        ("FileDescription", "MixerPlus"),
+        ("FileDescription", "mixerplus"),
         ("FileVersion", version.as_str()),
         ("InternalName", "mixerplus"),
         ("LegalCopyright", copyright),
         ("OriginalFilename", "mixerplus.exe"),
-        ("ProductName", "MixerPlus"),
+        ("ProductName", "mixerplus"),
         ("ProductVersion", version.as_str()),
     ]
     .iter()

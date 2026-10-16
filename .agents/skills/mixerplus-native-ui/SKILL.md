@@ -65,6 +65,8 @@ description: Rules for MixerPlus's Win32 tray icon and popup - child controls, c
 - Its scrolling content is rendered once into an offscreen bitmap (`Cache`) and
   only copied while scrolling; anything that changes the content must be part of
   `CacheKey`. The caption text and icon are hidden with `SetWindowThemeAttribute`.
+- The executable's version resource (`build.rs`) names the product `mixerplus`, the
+  same as the binary; keep `FileDescription`, `ProductName`, and `InternalName` equal.
 - The popup has an empty window title (except with `--inspect-ui`) so Task Manager
   does not list it as an app window.
 
