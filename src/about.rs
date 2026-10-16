@@ -678,6 +678,12 @@ pub fn show(credits: bool) -> Result<()> {
             hInstance: instance.into(),
             lpszClassName: CLASS,
             hCursor: LoadCursorW(None, IDC_ARROW)?,
+            // The embedded application icon (ID 1, from build.rs), shown in Alt+Tab.
+            hIcon: LoadIconW(
+                Some(instance.into()),
+                PCWSTR(std::ptr::without_provenance(1)),
+            )
+            .unwrap_or_default(),
             ..Default::default()
         };
         // Registering twice fails harmlessly with ERROR_CLASS_ALREADY_EXISTS.
