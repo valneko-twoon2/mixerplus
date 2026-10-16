@@ -1,0 +1,50 @@
+<div align="center">
+
+# MixerPlus
+
+**Windows 11 のサウンドのフライアウトそっくりな、小さなトレイ音量ミキサー。**
+
+[![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows11&logoColor=white)](#インストール)
+[![Rust](https://img.shields.io/badge/Rust-native%20Win32-DEA584?logo=rust&logoColor=black)](https://www.rust-lang.org/)
+[![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
+
+[English](README.md) · **日本語**
+
+<img src="docs/images/popup.png" alt="出力・入力・アプリごとのスライダーが並ぶ MixerPlus のポップアップ" width="300">
+
+<sub>ポップアップを <code>--snapshot</code> で書き出したものです（<a href="DEVELOPMENT.md">DEVELOPMENT.md</a> 参照）。</sub>
+
+</div>
+
+---
+
+## 特長
+
+- **ワンクリックで調整**: トレイアイコンをクリックすると、既定の出力と入力、そしてアプリごとの音量を調整できます。どのスライダーにも、音量の値とリアルタイムのレベルメーターが付きます。
+- **何でもミュート**: デバイスやアプリのアイコンをクリックするだけです。
+- **デバイスの切り替え**: シェブロンの先の一覧から、既定の出力と入力を選べます。デバイスごとの音量もそこで変えられます。
+- **プリセット**: 今の音量とミュートの状態（出力、入力、すべてのアプリ）に名前を付けて保存し、あとでワンクリックで適用できます。自動で適用されることはありません。
+- **ネイティブな見た目**: システムのライト／ダークモードとアクセントカラーに従います。純粋な Win32 で、追加のランタイムは要りません。
+- **オープンソースのクレジット**: トレイアイコンを右クリックすると、「MixerPlus について」でライセンスを、「Credits」で組み込んだライブラリの一覧とそれぞれのライセンスを見られます。
+
+## インストール
+
+```powershell
+irm https://github.com/valneko-twoon2/MixerPlus/releases/latest/download/install.ps1 | iex
+```
+
+現在のユーザー用に（管理者権限なしで）`%LocalAppData%\Programs\MixerPlus` へ入れて起動し、サインインのたびに自動で起動します。更新するときは、同じコマンドをもう一度実行します。
+
+削除するには、設定の「アプリ」を使います。プリセット（`%AppData%\MixerPlus\presets.json`）は、インストール先の `uninstall.ps1` を `-RemoveData` 付きで実行しない限り残ります。
+
+## 注意
+
+- 一覧に出るのは、今、音声セッションを持っているアプリだけです。排他モードで再生しているアプリには、アプリの音量が効かないことがあります。
+- 既定のデバイスの切り替えには、文書化されていない Windows のインターフェイスを使っているため、Windows の更新で動かなくなることがあります。
+- MixerPlus が書き込むのはプリセットのファイルだけで、音声を録音することはありません。
+
+ソースからのビルドは、[DEVELOPMENT.md](DEVELOPMENT.md)（英語）を見てください。
+
+## ライセンス
+
+MIT。[LICENSE](LICENSE) を参照してください。サードパーティのライセンスは [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) と、アプリ内（トレイアイコンの右クリック > 「Credits」）にあります。

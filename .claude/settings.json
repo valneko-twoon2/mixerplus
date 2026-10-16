@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File \"$(git rev-parse --show-toplevel)/scripts/agent-stop.ps1\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

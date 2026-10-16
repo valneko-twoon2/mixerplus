@@ -1,0 +1,94 @@
+---
+name: mixerplus-native-ui
+description: Rules for MixerPlus's Win32 tray icon and popup - child controls, custom painting, text rendering, DPI, keyboard handling, and pagination in src/ui.rs, src/appearance.rs, and src/drawing.rs.
+---
+
+# MixerPlus native UI
+
+## Popup behavior
+
+- Keep the popup within the active monitor work area and support DPI, keyboard
+  navigation, Escape, outside-click dismissal, and Explorer restart recovery.
+- Keep navigation and device buttons alive across page changes. Defer row
+  rebuilds until native click notifications unwind; never recycle the clicked
+  button's HWND as a different control. Exercise `--check-ui` after pager edits.
+- The popup refreshes every second while visible. Update captions with
+  `set_text`, which skips unchanged text, so polling does not repaint controls.
+
+## Layout and motion
+
+- The popup imitates the Windows 11 quick settings audio flyout. Keep that look:
+  no gradients or custom themes beyond the system light/dark palette and accent
+  in `appearance.rs`. The volume value beside each slider is a deliberate MixerPlus
+  addition.
+- Views: `View::Presets` (see `mixerplus-presets`), `View::Mixer` (endpoint rows with a chevron, then application rows) and
+  `View::Devices` (in-popup default-device list with a volume slider per device). View changes are posted as
+  `REFRESH_PAGE` so the clicked button's notification unwinds first.
+- Owner-drawn buttons pack their kind, Fluent glyph, and selection/mute flag in
+  `GWLP_USERDATA` (`appearance::pack`). Use `set_glyph`/`set_flag` for updates.
+- Sliders show a live peak meter (`IAudioMeterInformation`, polled every 33 ms
+  while the popup is visible and stored in a window property). Keep polling cheap:
+  repaint only when the quantized value changes.
+- Switching views cross-fades captured bitmaps. While it runs the controls are
+  hidden and the popup paints the transition itself (`appearance::compose`);
+  `finish_layout` defers the window resize to `begin_transition`, so the window
+  never shows the new size early. Never reintroduce a child overlay: lower
+  siblings repaint over it.
+- The popup sits at the bottom-right of the work area with a 12 px margin. It is
+  inserted just below the taskbar in z-order (again after activation) and slides
+  from behind it with ease-out, then back with ease-in; animations follow the
+  Windows client-area animation setting. A tray click within 400 ms of a
+  dismissal toggles the popup closed instead of reopening it.
+
+## Painting
+
+- Labels use `WM_CTLCOLORSTATIC` with a null brush and a subclass that paints
+  the surface. STATIC controls draw synchronously inside `WM_SETTEXT` without
+  `WM_PAINT`; `label_proc` suppresses that drawing and invalidates instead.
+  Removing it makes refreshed labels stack ghosted text.
+- Set fonts without redraw and invalidate after installing a paint subclass;
+  otherwise a control created in a visible popup validates itself unpainted.
+- Text uses DirectWrite through a Direct2D DC render target with grayscale
+  antialiasing. The face, weight, and size come from the DC's selected font:
+  `Segoe UI Variable Text` falls back to Yu Gothic UI for Japanese like the
+  shell, whereas GDI font linking would pick Meiryo UI.
+- Every custom paint goes through an offscreen `Frame` to avoid flicker. Shapes
+  and icons use GDI+. Flush GDI before GDI+ or Direct2D draws on a DC.
+
+## About window
+
+- `about.rs` is one custom-painted top-level window laid out like a Settings page
+  (large title, cards on a flat background; no icon or footer). The tray menu opens
+  it on the license (*MixerPlus について*) or on the Credits list (*Credits*); a
+  crate's license is a third view with a back button. It is owned by a hidden `STATIC`
+  window so it has no taskbar button; keep that owner when changing creation.
+- Its scrolling content is rendered once into an offscreen bitmap (`Cache`) and
+  only copied while scrolling; anything that changes the content must be part of
+  `CacheKey`. The caption text and icon are hidden with `SetWindowThemeAttribute`.
+- The popup has an empty window title (except with `--inspect-ui`) so Task Manager
+  does not list it as an app window.
+
+## Tray icon
+
+- The icon is generated at runtime (`appearance::tray_icon`): the taskbar speaker
+  glyph in the theme accent color. Its coverage is rendered over the matching
+  taskbar shade before becoming alpha, so weight matches the system icons. It is regenerated on
+  theme changes. Left-click toggles the popup; right-click shows the tray menu
+  (`tray_menu`), which hides the popup first because the menu runs its own
+  message loop and would stall a sliding popup.
+- Device list selection changes update item flags in place (`REFRESH_STATE`);
+  only list changes rebuild, and visible rebuilds run inside `quietly`, which
+  suspends redraw so view switches do not flicker.
+
+- `maintain_tray` retries adding the icon until Explorer accepts it, probing with
+  `NIM_MODIFY` first because `NIM_ADD` can time out after succeeding.
+- On Windows 11 it promotes the icon next to the system icons by setting
+  `IsPromoted=1` under `HKCU\Control Panel\NotifyIconSettings\<id>` for the entry
+  whose `ExecutablePath` matches this executable. It only writes when the value
+  is absent, so a later choice in Windows Settings is preserved.
+
+## Checks
+
+For rendering changes, export previews with
+`--snapshot src/target/preview.bmp --preview-dpi 96` and `--preview-dpi 144`, and
+watch a live popup for a few seconds so refresh-driven repaints are covered.

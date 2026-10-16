@@ -1,0 +1,13 @@
+/target/
+/src/target/
+/artifacts/
+/.vs/
+**/bin/
+**/obj/
+*.user
+*.suo
+*.bak
+*.log
+*.zip
+.claude/settings.local.json
+.codex/*.local.*

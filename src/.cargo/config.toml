@@ -1,0 +1,9 @@
+[build]
+# Debug info stays off. Hardening: control-flow guard, a statically linked CRT so no
+# redistributable DLL can be planted, and system-directory-only static imports.
+rustflags = [
+    "-C", "link-arg=/DEBUG:NONE",
+    "-C", "control-flow-guard=checks",
+    "-C", "target-feature=+crt-static",
+    "-C", "link-arg=/DEPENDENTLOADFLAG:0x800",
+]
