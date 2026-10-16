@@ -14,6 +14,12 @@ description: Rules for mixerplus's Win32 tray icon and popup - child controls, c
   button's HWND as a different control. Exercise `--check-ui` after pager edits.
 - The popup refreshes every second while visible. Update captions with
   `set_text`, which skips unchanged text, so polling does not repaint controls.
+- `clear_rows` hides row controls into `App::spare` and `child` reuses them, since
+  creating and destroying windows dominated view switches. Reset per-use state in
+  `appearance::recycle`; the clicked button and EDIT boxes are destroyed instead.
+- Show and hide child controls with `ShowWindow`, not `WS_VISIBLE` at creation or
+  `SWP_SHOWWINDOW`/`SWP_HIDEWINDOW`, which take a path about a hundred times slower.
+  Showing many controls in a visible popup goes inside `WM_SETREDRAW` off/on.
 
 ## Layout and motion
 
@@ -48,12 +54,14 @@ description: Rules for mixerplus's Win32 tray icon and popup - child controls, c
   Removing it makes refreshed labels stack ghosted text.
 - Set fonts without redraw and invalidate after installing a paint subclass;
   otherwise a control created in a visible popup validates itself unpainted.
-- Text uses DirectWrite through a Direct2D DC render target with grayscale
-  antialiasing. The face, weight, and size come from the DC's selected font:
-  `Segoe UI Variable Text` falls back to Yu Gothic UI for Japanese like the
-  shell, whereas GDI font linking would pick Meiryo UI.
+- Text uses DirectWrite layouts drawn through its GDI-compatible bitmap render
+  target with grayscale antialiasing; text formats are cached. A Direct2D DC
+  render target cost about 0.15 ms of binding and flushing per string. The face,
+  weight, and size come from the DC's selected font: `Segoe UI Variable Text`
+  falls back to Yu Gothic UI for Japanese like the shell, whereas GDI font
+  linking would pick Meiryo UI.
 - Every custom paint goes through an offscreen `Frame` to avoid flicker. Shapes
-  and icons use GDI+. Flush GDI before GDI+ or Direct2D draws on a DC.
+  and icons use GDI+. Flush GDI before GDI+ or DirectWrite draws on a DC.
 
 ## About window
 

@@ -588,6 +588,17 @@ pub unsafe fn set_app_icon(hwnd: HWND, icon: HICON) {
     }
 }
 
+/// Forgets a hidden control's per-use state so it can be reused as another control.
+pub unsafe fn recycle(hwnd: HWND) {
+    unsafe {
+        let _ = RemovePropW(hwnd, w!("mixerplusIcon"));
+        let _ = RemovePropW(hwnd, w!("mixerplusMeter"));
+        if hovered(hwnd) {
+            HOVER.set(0);
+        }
+    }
+}
+
 unsafe fn update_data(hwnd: HWND, mask: isize, value: isize) {
     unsafe {
         let data = GetWindowLongPtrW(hwnd, GWLP_USERDATA);

@@ -1,7 +1,11 @@
 use crate::presets::{AppSetting, Preset};
 use std::{
-    cell::RefCell,
+    cell::{OnceCell, Ref, RefCell},
     collections::{BTreeMap, HashMap},
+    sync::{
+        Arc,
+        atomic::{AtomicU32, Ordering},
+    },
 };
 use windows::{
     Win32::UI::Shell::{IShellItem2, SHCreateItemFromParsingName, SHLoadIndirectString},
@@ -25,7 +29,7 @@ use windows::{
             },
         },
     },
-    core::{GUID, HRESULT, IUnknown_Vtbl, Interface, PCWSTR, PWSTR, Result},
+    core::{GUID, HRESULT, IUnknown_Vtbl, Interface, PCWSTR, PWSTR, Result, implement},
 };
 
 #[derive(Clone)]
@@ -118,21 +122,166 @@ impl Row {
     }
 }
 
+/// An active endpoint. Each interface is activated on first use and then kept, since
+/// activation is a round trip to audiosrv and most endpoints are never shown.
+struct Endpoint {
+    id: String,
+    name: String,
+    form: u32,
+    device: IMMDevice,
+    volume: OnceCell<Option<IAudioEndpointVolume>>,
+    meter: OnceCell<Option<IAudioMeterInformation>>,
+    sessions: OnceCell<Option<IAudioSessionManager2>>,
+}
+
+impl Endpoint {
+    fn activate<T: Interface>(&self, cell: &OnceCell<Option<T>>) -> Option<T> {
+        cell.get_or_init(|| unsafe { self.device.Activate(CLSCTX_ALL, None).ok() })
+            .clone()
+    }
+
+    fn volume(&self) -> Option<IAudioEndpointVolume> {
+        self.activate(&self.volume)
+    }
+
+    fn meter(&self) -> Option<IAudioMeterInformation> {
+        self.activate(&self.meter)
+    }
+
+    fn sessions(&self) -> Option<IAudioSessionManager2> {
+        self.activate(&self.sessions)
+    }
+}
+
+/// Active endpoints and defaults of both flows. Asking audiosrv for the default
+/// endpoint or the endpoint list takes about a millisecond each, so they are read
+/// again only after Windows reports a change.
+struct Endpoints {
+    /// The change count the lists were read at.
+    generation: u32,
+    render: (String, Vec<Endpoint>),
+    capture: (String, Vec<Endpoint>),
+}
+
+impl Endpoints {
+    fn flow(&self, flow: EDataFlow) -> &(String, Vec<Endpoint>) {
+        if flow == eCapture {
+            &self.capture
+        } else {
+            &self.render
+        }
+    }
+}
+
+/// Counts endpoint changes reported by Windows. It runs on a Windows thread, so it
+/// only bumps the counter.
+#[implement(IMMNotificationClient)]
+struct Changes(Arc<AtomicU32>);
+
+impl IMMNotificationClient_Impl for Changes_Impl {
+    fn OnDeviceStateChanged(&self, _: &PCWSTR, _: DEVICE_STATE) -> Result<()> {
+        self.0.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+
+    fn OnDeviceAdded(&self, _: &PCWSTR) -> Result<()> {
+        self.0.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+
+    fn OnDeviceRemoved(&self, _: &PCWSTR) -> Result<()> {
+        self.0.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+
+    fn OnDefaultDeviceChanged(&self, _: EDataFlow, _: ERole, _: &PCWSTR) -> Result<()> {
+        self.0.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+
+    fn OnPropertyValueChanged(&self, _: &PCWSTR, key: &PROPERTYKEY) -> Result<()> {
+        // Drivers report other properties often; only the shown ones matter.
+        let same = |other: &PROPERTYKEY| other.fmtid == key.fmtid && other.pid == key.pid;
+        if same(&PKEY_Device_FriendlyName) || same(&PKEY_AudioEndpoint_FormFactor) {
+            self.0.fetch_add(1, Ordering::Relaxed);
+        }
+        Ok(())
+    }
+}
+
 pub struct Audio {
     enumerator: IMMDeviceEnumerator,
     // Display names are resolved once per executable; polling runs every second.
     names: RefCell<HashMap<String, String>>,
+    changes: Arc<AtomicU32>,
+    client: IMMNotificationClient,
+    endpoints: RefCell<Option<Endpoints>>,
+}
+
+impl Drop for Audio {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = self
+                .enumerator
+                .UnregisterEndpointNotificationCallback(&self.client);
+        }
+    }
 }
 
 impl Audio {
     pub fn new() -> Result<Self> {
+        let enumerator: IMMDeviceEnumerator =
+            unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)? };
+        let changes = Arc::new(AtomicU32::new(0));
+        let client: IMMNotificationClient = Changes(changes.clone()).into();
+        // Without notifications, the endpoints are read afresh every time.
+        if unsafe { enumerator.RegisterEndpointNotificationCallback(&client) }.is_err() {
+            changes.store(u32::MAX, Ordering::Relaxed);
+        }
         Ok(Self {
-            enumerator: unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)? },
+            enumerator,
             names: RefCell::default(),
+            changes,
+            client,
+            endpoints: RefCell::new(None),
         })
     }
 
-    pub fn devices(&self, flow: EDataFlow) -> Result<Vec<Device>> {
+    /// Reads endpoints afresh on next use, for example when the popup opens.
+    pub fn forget(&self) {
+        if let Ok(mut endpoints) = self.endpoints.try_borrow_mut() {
+            endpoints.take();
+        }
+    }
+
+    /// The cached endpoints, read again when Windows has reported a change.
+    fn endpoints(&self) -> Result<Ref<'_, Endpoints>> {
+        let busy = || windows::core::Error::from_hresult(HRESULT(0x80004005u32 as i32));
+        let generation = self.changes.load(Ordering::Relaxed);
+        let current = self
+            .endpoints
+            .try_borrow()
+            .map_err(|_| busy())?
+            .as_ref()
+            .is_some_and(|endpoints| endpoints.generation == generation && generation != u32::MAX);
+        if !current {
+            let endpoints = Endpoints {
+                generation,
+                render: self.read_endpoints(eRender)?,
+                // A missing microphone is normal and must not hide the outputs.
+                capture: self.read_endpoints(eCapture).unwrap_or_default(),
+            };
+            *self.endpoints.try_borrow_mut().map_err(|_| busy())? = Some(endpoints);
+        }
+        Ref::filter_map(
+            self.endpoints.try_borrow().map_err(|_| busy())?,
+            Option::as_ref,
+        )
+        .map_err(|_| busy())
+    }
+
+    /// The default endpoint's ID and every active endpoint of one flow.
+    fn read_endpoints(&self, flow: EDataFlow) -> Result<(String, Vec<Endpoint>)> {
         unsafe {
             let default = self
                 .enumerator
@@ -142,75 +291,89 @@ impl Audio {
             let collection = self
                 .enumerator
                 .EnumAudioEndpoints(flow, DEVICE_STATE_ACTIVE)?;
-            let mut devices = Vec::new();
+            let mut endpoints = Vec::new();
             for i in 0..collection.GetCount()? {
                 let device = collection.Item(i)?;
                 let id = owned_string(device.GetId()?)?;
-                devices.push(Device {
-                    selected: id == default,
-                    name: device_name(&device).unwrap_or_else(|_| id.clone()),
-                    form: form_factor(&device).unwrap_or(UnknownFormFactor.0 as u32),
-                    volume: device.Activate(CLSCTX_ALL, None).ok().map(Volume::Endpoint),
-                    meter: device.Activate(CLSCTX_ALL, None).ok(),
+                let (name, form) = properties(&device);
+                endpoints.push(Endpoint {
+                    name: name.unwrap_or_else(|| id.clone()),
+                    form: form.unwrap_or(UnknownFormFactor.0 as u32),
+                    device,
+                    volume: OnceCell::new(),
+                    meter: OnceCell::new(),
+                    sessions: OnceCell::new(),
                     id,
                 });
             }
-            Ok(devices)
+            Ok((default, endpoints))
         }
     }
 
-    pub fn endpoint(&self, flow: EDataFlow) -> Result<Row> {
-        unsafe {
-            let device = self.enumerator.GetDefaultAudioEndpoint(flow, eMultimedia)?;
-            Ok(Row {
-                key: owned_string(device.GetId()?)?,
-                name: device_name(&device)?,
-                volume: Volume::Endpoint(device.Activate(CLSCTX_ALL, None)?),
-                icon_path: None,
-                meters: device.Activate(CLSCTX_ALL, None).ok().into_iter().collect(),
-                process: String::new(),
+    pub fn devices(&self, flow: EDataFlow) -> Result<Vec<Device>> {
+        let endpoints = self.endpoints()?;
+        let (default, list) = endpoints.flow(flow);
+        Ok(list
+            .iter()
+            .map(|endpoint| Device {
+                id: endpoint.id.clone(),
+                name: endpoint.name.clone(),
+                selected: endpoint.id == *default,
+                form: endpoint.form,
+                volume: endpoint.volume().map(Volume::Endpoint),
+                meter: endpoint.meter(),
             })
-        }
+            .collect())
+    }
+
+    pub fn endpoint(&self, flow: EDataFlow) -> Result<Row> {
+        let endpoints = self.endpoints()?;
+        let (default, list) = endpoints.flow(flow);
+        let endpoint = list
+            .iter()
+            .find(|endpoint| endpoint.id == *default)
+            // ERROR_NOT_FOUND, like a missing default endpoint.
+            .ok_or_else(|| windows::core::Error::from_hresult(HRESULT(0x80070490u32 as i32)))?;
+        let volume = endpoint
+            .volume()
+            .ok_or_else(|| windows::core::Error::from_hresult(HRESULT(0x80070490u32 as i32)))?;
+        Ok(Row {
+            key: endpoint.id.clone(),
+            name: endpoint.name.clone(),
+            volume: Volume::Endpoint(volume),
+            icon_path: None,
+            meters: endpoint.meter().into_iter().collect(),
+            process: String::new(),
+        })
     }
 
     /// Lists applications once, combining their sessions on every active output.
     pub fn sessions(&self) -> Result<Vec<Row>> {
-        unsafe {
-            let default = self
-                .enumerator
-                .GetDefaultAudioEndpoint(eRender, eMultimedia)
-                .and_then(|d| owned_string(d.GetId()?))
-                .unwrap_or_default();
-            let collection = self
-                .enumerator
-                .EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE)?;
-            let mut devices = Vec::new();
-            for i in 0..collection.GetCount()? {
-                let device = collection.Item(i)?;
-                let id = owned_string(device.GetId()?).unwrap_or_default();
-                devices.push((id != default, device));
-            }
-            // Sessions on the default output come first and supply the displayed level.
-            devices.sort_by_key(|(other, _)| *other);
-            let mut groups: BTreeMap<String, Row> = BTreeMap::new();
-            for (_, device) in &devices {
-                // A disconnected device must not hide sessions on other devices.
-                let _ = self.collect_sessions(device, &mut groups);
-            }
-            let mut rows: Vec<_> = groups.into_values().collect();
-            // System sounds lead the list; applications follow alphabetically.
-            rows.sort_by_key(|row| (row.key != "system", row.name.to_lowercase()));
-            Ok(rows)
+        let endpoints = self.endpoints()?;
+        let (default, list) = endpoints.flow(eRender);
+        // Sessions on the default output come first and supply the displayed level.
+        let managers = list
+            .iter()
+            .filter(|endpoint| endpoint.id == *default)
+            .chain(list.iter().filter(|endpoint| endpoint.id != *default))
+            .filter_map(Endpoint::sessions);
+        let mut groups: BTreeMap<String, Row> = BTreeMap::new();
+        for manager in managers {
+            // A disconnected device must not hide sessions on other devices.
+            let _ = unsafe { self.collect_sessions(&manager, &mut groups) };
         }
+        let mut rows: Vec<_> = groups.into_values().collect();
+        // System sounds lead the list; applications follow alphabetically.
+        rows.sort_by_key(|row| (row.key != "system", row.name.to_lowercase()));
+        Ok(rows)
     }
 
     unsafe fn collect_sessions(
         &self,
-        device: &IMMDevice,
+        manager: &IAudioSessionManager2,
         groups: &mut BTreeMap<String, Row>,
     ) -> Result<()> {
         unsafe {
-            let manager: IAudioSessionManager2 = device.Activate(CLSCTX_ALL, None)?;
             let sessions = manager.GetSessionEnumerator()?;
             for i in 0..sessions.GetCount()? {
                 let control = sessions.GetSession(i)?;
@@ -369,6 +532,8 @@ impl Audio {
     }
 
     pub fn set_default(&self, id: &str) -> Result<()> {
+        // The change notification arrives later; the refresh after a switch reads now.
+        self.forget();
         let id: Vec<u16> = id.encode_utf16().chain(Some(0)).collect();
         unsafe {
             let policy: IPolicyConfig = CoCreateInstance(
@@ -453,23 +618,29 @@ fn process_path(pid: u32) -> Option<String> {
     }
 }
 
-fn form_factor(device: &IMMDevice) -> Result<u32> {
+/// The friendly name and `EndpointFormFactor` of a device, from one property store.
+fn properties(device: &IMMDevice) -> (Option<String>, Option<u32>) {
     unsafe {
-        let properties = device.OpenPropertyStore(STGM_READ)?;
-        let mut value = properties.GetValue(&PKEY_AudioEndpoint_FormFactor)?;
-        let result = PropVariantToUInt32(&value);
-        PropVariantClear(&mut value)?;
-        result
-    }
-}
-
-fn device_name(device: &IMMDevice) -> Result<String> {
-    unsafe {
-        let properties = device.OpenPropertyStore(STGM_READ)?;
-        let mut value = properties.GetValue(&PKEY_Device_FriendlyName)?;
-        let result = PropVariantToStringAlloc(&value).and_then(|text| owned_string(text));
-        PropVariantClear(&mut value)?;
-        result
+        let Ok(properties) = device.OpenPropertyStore(STGM_READ) else {
+            return (None, None);
+        };
+        let name = properties
+            .GetValue(&PKEY_Device_FriendlyName)
+            .ok()
+            .and_then(|mut value| {
+                let text = PropVariantToStringAlloc(&value).and_then(|text| owned_string(text));
+                let _ = PropVariantClear(&mut value);
+                text.ok()
+            });
+        let form = properties
+            .GetValue(&PKEY_AudioEndpoint_FormFactor)
+            .ok()
+            .and_then(|mut value| {
+                let form = PropVariantToUInt32(&value);
+                let _ = PropVariantClear(&mut value);
+                form.ok()
+            });
+        (name, form)
     }
 }
 

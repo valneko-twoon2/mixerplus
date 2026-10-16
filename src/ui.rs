@@ -56,6 +56,8 @@ const TRANSITION_MS: f32 = 220.0;
 const TRAY_RETRY_MS: u32 = 2_000;
 const PROMOTION_ATTEMPTS: u32 = 15;
 const TBM_GETPOS: u32 = WM_USER;
+/// Hidden row windows kept for reuse; more than a few pages' worth are destroyed.
+const MAX_SPARE: usize = 96;
 
 // Segoe Fluent Icons code points.
 const SPEAKER: u16 = 0xe7f5;
@@ -85,6 +87,38 @@ enum View {
 struct EditState {
     hwnd: HWND,
     target: Option<String>,
+}
+
+/// Window classes of popup controls.
+#[derive(Clone, Copy, PartialEq)]
+enum Class {
+    Static,
+    Button,
+    Trackbar,
+    Edit,
+}
+
+impl Class {
+    fn name(self) -> PCWSTR {
+        match self {
+            Self::Static => w!("STATIC"),
+            Self::Button => w!("BUTTON"),
+            Self::Trackbar => TRACKBAR_CLASSW,
+            Self::Edit => w!("EDIT"),
+        }
+    }
+
+    /// The class of a row window that can be reused; text boxes never are.
+    fn of(hwnd: HWND) -> Option<Self> {
+        let mut name = [0u16; 32];
+        let length = unsafe { GetClassNameW(hwnd, &mut name) } as usize;
+        let name = String::from_utf16_lossy(&name[..length]);
+        [Self::Static, Self::Button, Self::Trackbar]
+            .into_iter()
+            .find(|class| {
+                unsafe { class.name().to_string() }.is_ok_and(|n| n.eq_ignore_ascii_case(&name))
+            })
+    }
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -220,6 +254,10 @@ struct App {
     controls: Vec<Control>,
     devices: Vec<(HWND, Device)>,
     children: Vec<HWND>,
+    /// Hidden row windows from earlier pages, reused before creating new ones.
+    spare: Vec<(Class, HWND)>,
+    /// The button whose click is being handled, which is never reused.
+    clicked: HWND,
     fonts: Fonts,
     icon: HICON,
     page: usize,
@@ -538,6 +576,8 @@ unsafe fn run_initialized() -> Result<()> {
             controls: Vec::new(),
             devices: Vec::new(),
             children: Vec::new(),
+            spare: Vec::new(),
+            clicked: HWND::default(),
             page: 0,
             pages: 1,
             signature: Vec::new(),
@@ -844,20 +884,54 @@ impl App {
 
     fn child(
         &mut self,
-        class: PCWSTR,
+        class: Class,
         text: &str,
         id: usize,
         rect: [i32; 4],
         style: WINDOW_STYLE,
         font: HFONT,
     ) -> Result<HWND> {
+        if let Some(index) = self.spare.iter().position(|(c, _)| *c == class) {
+            let (_, hwnd) = self.spare.swap_remove(index);
+            unsafe {
+                SetWindowLongPtrW(hwnd, GWLP_ID, id as isize);
+                if class == Class::Static {
+                    // Labels differ only in alignment, which their paint subclass reads.
+                    let current = GetWindowLongW(hwnd, GWL_STYLE) as u32;
+                    let next = current & !SS_CENTER.0 | style.0 & SS_CENTER.0;
+                    SetWindowLongW(hwnd, GWL_STYLE, next as i32);
+                }
+                SendMessageW(
+                    hwnd,
+                    WM_SETFONT,
+                    Some(WPARAM(font.0 as usize)),
+                    Some(LPARAM(0)),
+                );
+                set_text(hwnd, text);
+                // The bottom of the z-order is where a new window goes, so tab order
+                // stays the creation order.
+                SetWindowPos(
+                    hwnd,
+                    Some(HWND_BOTTOM),
+                    self.px(rect[0]),
+                    self.px(rect[1]),
+                    self.px(rect[2]),
+                    self.px(rect[3]),
+                    SWP_NOACTIVATE,
+                )?;
+                // SWP_SHOWWINDOW and WS_VISIBLE at creation take a far slower path.
+                let _ = ShowWindow(hwnd, SW_SHOWNA);
+            }
+            self.children.push(hwnd);
+            return Ok(hwnd);
+        }
         let text = wide(text);
         unsafe {
             let hwnd = CreateWindowExW(
                 WINDOW_EX_STYLE(0),
-                class,
+                class.name(),
                 PCWSTR(text.as_ptr()),
-                WS_CHILD | WS_VISIBLE | style,
+                WS_CHILD | style,
                 self.px(rect[0]),
                 self.px(rect[1]),
                 self.px(rect[2]),
@@ -875,6 +949,7 @@ impl App {
                 // its custom painting subclass is installed.
                 Some(LPARAM(0)),
             );
+            let _ = ShowWindow(hwnd, SW_SHOWNA);
             self.children.push(hwnd);
             Ok(hwnd)
         }
@@ -882,7 +957,7 @@ impl App {
 
     fn label(&mut self, text: &str, rect: [i32; 4], font: HFONT, style: isize) -> Result<HWND> {
         let hwnd = self.child(
-            w!("STATIC"),
+            Class::Static,
             text,
             0,
             rect,
@@ -902,7 +977,7 @@ impl App {
         data: isize,
     ) -> Result<HWND> {
         let hwnd = self.child(
-            w!("BUTTON"),
+            Class::Button,
             text,
             id,
             rect,
@@ -978,17 +1053,39 @@ impl App {
         Ok(())
     }
 
-    /// Destroys the current page's rows; chrome keeps its window identities.
+    /// Removes the current page's rows; chrome keeps its window identities. Rows are
+    /// hidden for reuse by the next page, since creating and destroying windows
+    /// dominated the cost of switching views.
     fn clear_rows(&mut self) {
         let rows: Vec<HWND> = self.children[self.chrome_count.min(self.children.len())..].to_vec();
-        for row in rows {
-            self.tool(TTM_DELTOOLW, row, "");
+        for row in &rows {
+            self.tool(TTM_DELTOOLW, *row, "");
         }
+        self.children
+            .truncate(self.chrome_count.min(self.children.len()));
         unsafe {
-            for child in self.children.drain(self.chrome_count..) {
-                let _ = DestroyWindow(child);
+            let focus = GetFocus();
+            for row in rows {
+                if focus == row {
+                    // As when a focused window is destroyed: no control keeps focus.
+                    let _ = SetFocus(None);
+                }
+                // The clicked button's notification may still be unwinding, so it is
+                // never reused as a different control.
+                match Class::of(row) {
+                    Some(class) if row != self.clicked && self.spare.len() < MAX_SPARE => {
+                        let _ = ShowWindow(row, SW_HIDE);
+                        SetWindowLongPtrW(row, GWLP_ID, 0);
+                        crate::appearance::recycle(row);
+                        self.spare.push((class, row));
+                    }
+                    _ => {
+                        let _ = DestroyWindow(row);
+                    }
+                }
             }
         }
+        self.clicked = HWND::default();
         self.controls.clear();
         self.devices.clear();
     }
@@ -1211,7 +1308,7 @@ impl App {
 
     fn slider(&mut self, id: usize, rect: [i32; 4]) -> Result<HWND> {
         let slider = self.child(
-            TRACKBAR_CLASSW,
+            Class::Trackbar,
             "",
             id,
             rect,
@@ -1251,7 +1348,7 @@ impl App {
     /// An inline name box over `rect` (logical pixels), with its rounded frame.
     fn name_box(&mut self, rect: [i32; 4], text: &str) -> Result<HWND> {
         let edit = self.child(
-            w!("EDIT"),
+            Class::Edit,
             text,
             EDIT_ID,
             [rect[0] + 12, rect[1] + 8, rect[2] - 24, rect[3] - 16],
@@ -1578,14 +1675,10 @@ impl App {
                     self.px(y.unwrap_or(0)),
                     self.px(width),
                     self.px(32),
-                    SWP_NOZORDER
-                        | SWP_NOACTIVATE
-                        | if y.is_some() {
-                            SWP_SHOWWINDOW
-                        } else {
-                            SWP_HIDEWINDOW
-                        },
+                    SWP_NOZORDER | SWP_NOACTIVATE,
                 );
+                // Far cheaper than SWP_SHOWWINDOW and SWP_HIDEWINDOW.
+                let _ = ShowWindow(hwnd, if y.is_some() { SW_SHOWNA } else { SW_HIDE });
             }
             let _ = EnableWindow(navigation.previous, self.page > 0);
             let _ = EnableWindow(navigation.next, self.page + 1 < self.pages);
@@ -1718,6 +1811,8 @@ impl App {
                     let _ = ShowWindow(self.hwnd, SW_HIDE);
                 }
             }
+            // Endpoints are cached while the popup is open; each opening reads them again.
+            self.audio.forget();
             crate::appearance::load_theme();
             crate::appearance::style_window(self.hwnd);
             let mut point = POINT::default();
@@ -1763,7 +1858,8 @@ impl App {
             }
             if scale != self.scale {
                 self.clear_rows();
-                for child in self.children.drain(..) {
+                let spare = self.spare.drain(..).map(|(_, hwnd)| hwnd);
+                for child in self.children.drain(..).chain(spare) {
                     let _ = DestroyWindow(child);
                 }
                 self.navigation = None;
@@ -2089,8 +2185,17 @@ impl App {
                 transition.to_height,
                 SWP_NOZORDER | SWP_NOACTIVATE,
             );
+            // Showing controls one by one in a visible popup repaints for each; inside
+            // `quietly` the popup already reports itself hidden.
+            let visible = IsWindowVisible(self.hwnd).as_bool();
+            if visible {
+                SendMessageW(self.hwnd, WM_SETREDRAW, Some(WPARAM(0)), None);
+            }
             for child in &transition.hidden {
                 let _ = ShowWindow(*child, SW_SHOWNA);
+            }
+            if visible {
+                SendMessageW(self.hwnd, WM_SETREDRAW, Some(WPARAM(1)), None);
             }
             let _ = RedrawWindow(
                 Some(self.hwnd),
@@ -2315,6 +2420,7 @@ unsafe extern "system" fn window_proc(
                     let id = wparam.0 & 0xffff;
                     let sender = HWND(lparam.0 as *mut _);
                     if GetDlgCtrlID(sender) as usize == id {
+                        app.clicked = sender;
                         app.command(id)
                     } else {
                         Ok(())

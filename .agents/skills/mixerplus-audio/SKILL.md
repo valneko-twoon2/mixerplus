@@ -16,6 +16,11 @@ description: Rules for mixerplus Core Audio work - COM lifetime, endpoint and se
   Sessions on the default output come first and supply the displayed level.
   Names come from the session display name (resolving `@` resources), then the
   executable's file description, then its file name; they are cached per row.
+- Endpoint lists, defaults, names, and activated endpoint interfaces are cached in
+  `Audio::endpoints`, since each default or list query is a millisecond round trip
+  to audiosrv. An `IMMNotificationClient` only bumps a change counter (it runs on
+  a Windows thread); the popup's opening and `set_default` call `Audio::forget`.
+  Sessions are still enumerated on every refresh.
 - Peak levels come from `IAudioMeterInformation`, one per endpoint or session;
   `Row::peak` returns the maximum. Meters are plain reads and never change audio.
 - Presets capture and apply through `Audio::capture_preset` and `apply_preset`;

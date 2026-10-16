@@ -1,19 +1,18 @@
 //! Antialiased text, vector shapes, and high-quality icon resampling.
 
-use std::{cell::RefCell, ptr::null_mut};
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    ffi::c_void,
+    ptr::null_mut,
+};
 use windows::{
     Win32::{
         Foundation::*,
-        Graphics::{
-            Direct2D::{Common::*, *},
-            DirectWrite::*,
-            Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM,
-            Gdi::*,
-            GdiPlus::*,
-        },
+        Graphics::{DirectWrite::*, Gdi::*, GdiPlus::*},
         UI::WindowsAndMessaging::HICON,
     },
-    core::{PCWSTR, Result, w},
+    core::{BOOL, IUnknown, IUnknownImpl, Interface, PCWSTR, Ref, Result, implement, w},
 };
 
 /// The Windows 11 shell font. DirectWrite falls back to Yu Gothic UI for Japanese
@@ -22,9 +21,214 @@ pub const FONT: PCWSTR = w!("Segoe UI Variable Text");
 /// Windows 11 icon font, with the Windows 10 font that shares its code points.
 pub const ICON_FONTS: [PCWSTR; 2] = [w!("Segoe Fluent Icons"), w!("Segoe MDL2 Assets")];
 
+/// How a cached text format lays out its line.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum Flow {
+    Leading,
+    Centered,
+    Wrapped,
+}
+
+/// Face, weight, pixel size, and flow of a cached text format.
+type FormatKey = ([u16; 32], i32, u32, Flow);
+
 struct Text {
-    target: ID2D1DCRenderTarget,
     factory: IDWriteFactory,
+    // Creating a format per string was a large part of text drawing; the windows use
+    // only a handful of fonts, so formats are kept for the life of the factory.
+    formats: RefCell<HashMap<FormatKey, IDWriteTextFormat>>,
+    /// DirectWrite's GDI-compatible bitmap, which text is composed into. A Direct2D DC
+    /// render target spent far longer binding and flushing per string than drawing.
+    target: IDWriteBitmapRenderTarget,
+    /// Pixel size of `target`, which only grows.
+    size: Cell<(i32, i32)>,
+    renderer: windows_core::ComObject<Glyphs>,
+}
+
+/// Draws the glyph runs of a text layout into the bitmap target.
+#[implement(IDWriteTextRenderer)]
+struct Glyphs {
+    target: IDWriteBitmapRenderTarget,
+    params: IDWriteRenderingParams,
+    color: Cell<COLORREF>,
+}
+
+impl IDWritePixelSnapping_Impl for Glyphs_Impl {
+    fn IsPixelSnappingDisabled(&self, _: *const c_void) -> Result<BOOL> {
+        std::result::Result::Ok(false.into())
+    }
+
+    fn GetCurrentTransform(&self, _: *const c_void, transform: *mut DWRITE_MATRIX) -> Result<()> {
+        unsafe { self.target.GetCurrentTransform(transform) }
+    }
+
+    fn GetPixelsPerDip(&self, _: *const c_void) -> Result<f32> {
+        std::result::Result::Ok(unsafe { self.target.GetPixelsPerDip() })
+    }
+}
+
+impl IDWriteTextRenderer_Impl for Glyphs_Impl {
+    fn DrawGlyphRun(
+        &self,
+        _: *const c_void,
+        x: f32,
+        y: f32,
+        mode: DWRITE_MEASURING_MODE,
+        run: *const DWRITE_GLYPH_RUN,
+        _: *const DWRITE_GLYPH_RUN_DESCRIPTION,
+        _: Ref<IUnknown>,
+    ) -> Result<()> {
+        unsafe {
+            self.target
+                .DrawGlyphRun(x, y, mode, run, &self.params, self.color.get(), None)
+        }
+    }
+
+    fn DrawUnderline(
+        &self,
+        _: *const c_void,
+        _: f32,
+        _: f32,
+        _: *const DWRITE_UNDERLINE,
+        _: Ref<IUnknown>,
+    ) -> Result<()> {
+        std::result::Result::Ok(())
+    }
+
+    fn DrawStrikethrough(
+        &self,
+        _: *const c_void,
+        _: f32,
+        _: f32,
+        _: *const DWRITE_STRIKETHROUGH,
+        _: Ref<IUnknown>,
+    ) -> Result<()> {
+        std::result::Result::Ok(())
+    }
+
+    /// The ellipsis that trims long lines is an inline object; it draws back through
+    /// this renderer.
+    fn DrawInlineObject(
+        &self,
+        context: *const c_void,
+        x: f32,
+        y: f32,
+        object: Ref<IDWriteInlineObject>,
+        sideways: BOOL,
+        right_to_left: BOOL,
+        effect: Ref<IUnknown>,
+    ) -> Result<()> {
+        let object = object.ok()?;
+        unsafe {
+            object.Draw(
+                Some(context),
+                &*self.as_interface::<IDWriteTextRenderer>(),
+                x,
+                y,
+                sideways.as_bool(),
+                right_to_left.as_bool(),
+                effect.as_ref(),
+            )
+        }
+    }
+}
+
+impl Text {
+    unsafe fn format(&self, font: &LOGFONTW, flow: Flow) -> Result<IDWriteTextFormat> {
+        let size = font.lfHeight.unsigned_abs().max(1);
+        let weight = font.lfWeight.clamp(1, 999);
+        let key = (font.lfFaceName, weight, size, flow);
+        if let Some(format) = self.formats.borrow().get(&key) {
+            return std::result::Result::Ok(format.clone());
+        }
+        unsafe {
+            let format = self.factory.CreateTextFormat(
+                PCWSTR(font.lfFaceName.as_ptr()),
+                None,
+                DWRITE_FONT_WEIGHT(weight),
+                DWRITE_FONT_STYLE_NORMAL,
+                DWRITE_FONT_STRETCH_NORMAL,
+                size as f32,
+                w!(""),
+            )?;
+            if flow == Flow::Wrapped {
+                format.SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP)?;
+            } else {
+                format.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP)?;
+                format.SetTextAlignment(if flow == Flow::Centered {
+                    DWRITE_TEXT_ALIGNMENT_CENTER
+                } else {
+                    DWRITE_TEXT_ALIGNMENT_LEADING
+                })?;
+                format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
+                let ellipsis = self.factory.CreateEllipsisTrimmingSign(&format)?;
+                format.SetTrimming(
+                    &DWRITE_TRIMMING {
+                        granularity: DWRITE_TRIMMING_GRANULARITY_CHARACTER,
+                        ..Default::default()
+                    },
+                    &ellipsis,
+                )?;
+            }
+            self.formats.borrow_mut().insert(key, format.clone());
+            std::result::Result::Ok(format)
+        }
+    }
+
+    /// Draws `layout` with its origin at `x`, `y` inside `clip`, a rectangle in the
+    /// DC's logical coordinates; text outside `clip` is cut off.
+    unsafe fn draw(
+        &self,
+        dc: HDC,
+        layout: &IDWriteTextLayout,
+        clip: RECT,
+        (x, y): (f32, f32),
+        color: COLORREF,
+    ) -> Result<()> {
+        let width = clip.right - clip.left;
+        let height = clip.bottom - clip.top;
+        unsafe {
+            let (current_width, current_height) = self.size.get();
+            if width > current_width || height > current_height {
+                let size = (width.max(current_width), height.max(current_height));
+                self.target.Resize(size.0 as u32, size.1 as u32)?;
+                self.size.set(size);
+            }
+            // Text is blended over what is already drawn, so the bitmap starts as a copy.
+            let memory = self.target.GetMemoryDC();
+            BitBlt(
+                memory,
+                0,
+                0,
+                width,
+                height,
+                Some(dc),
+                clip.left,
+                clip.top,
+                SRCCOPY,
+            )?;
+            // DirectWrite writes the bitmap directly, after any queued GDI work.
+            let _ = GdiFlush();
+            self.renderer.color.set(color);
+            layout.Draw(
+                None,
+                &*self.renderer.as_interface::<IDWriteTextRenderer>(),
+                x - clip.left as f32,
+                y - clip.top as f32,
+            )?;
+            BitBlt(
+                dc,
+                clip.left,
+                clip.top,
+                width,
+                height,
+                Some(memory),
+                0,
+                0,
+                SRCCOPY,
+            )
+        }
+    }
 }
 
 thread_local! {
@@ -50,22 +254,27 @@ impl Runtime {
         }
         let runtime = Self(token);
         let text = unsafe {
-            let factory: ID2D1Factory = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, None)?;
-            let target = factory.CreateDCRenderTarget(&D2D1_RENDER_TARGET_PROPERTIES {
-                r#type: D2D1_RENDER_TARGET_TYPE_DEFAULT,
-                pixelFormat: D2D1_PIXEL_FORMAT {
-                    format: DXGI_FORMAT_B8G8R8A8_UNORM,
-                    alphaMode: D2D1_ALPHA_MODE_IGNORE,
-                },
-                // Coordinates and font sizes are already in device pixels.
-                dpiX: 96.0,
-                dpiY: 96.0,
-                ..Default::default()
-            })?;
-            target.SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+            let factory: IDWriteFactory = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)?;
+            let target = factory
+                .GetGdiInterop()?
+                .CreateBitmapRenderTarget(None, 1, 1)?;
+            // Grayscale antialiasing as the shell flyouts use, with the system's tuning.
+            target
+                .cast::<IDWriteBitmapRenderTarget1>()?
+                .SetTextAntialiasMode(DWRITE_TEXT_ANTIALIAS_MODE_GRAYSCALE)?;
+            // Coordinates and font sizes are already in device pixels.
+            target.SetPixelsPerDip(1.0)?;
+            let renderer = windows_core::ComObject::new(Glyphs {
+                target: target.clone(),
+                params: factory.CreateRenderingParams()?,
+                color: Cell::new(COLORREF(0)),
+            });
             Text {
+                factory,
+                formats: RefCell::default(),
                 target,
-                factory: DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)?,
+                size: Cell::new((1, 1)),
+                renderer,
             }
         };
         TEXT.with(|state| *state.borrow_mut() = Some(text));
@@ -320,27 +529,10 @@ pub unsafe fn text_clipped(
     }
 }
 
-/// A word-wrapping text format in the given font.
-unsafe fn wrap_format(state: &Text, font: &LOGFONTW) -> Result<IDWriteTextFormat> {
-    unsafe {
-        let format = state.factory.CreateTextFormat(
-            PCWSTR(font.lfFaceName.as_ptr()),
-            None,
-            DWRITE_FONT_WEIGHT(font.lfWeight.clamp(1, 999)),
-            DWRITE_FONT_STYLE_NORMAL,
-            DWRITE_FONT_STRETCH_NORMAL,
-            font.lfHeight.unsigned_abs().max(1) as f32,
-            w!(""),
-        )?;
-        format.SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP)?;
-        std::result::Result::Ok(format)
-    }
-}
-
 /// Height of `text` wrapped to `width` pixels in the given font.
 unsafe fn wrapped_height(state: &Text, text: &[u16], font: &LOGFONTW, width: i32) -> Result<i32> {
     unsafe {
-        let format = wrap_format(state, font)?;
+        let format = state.format(font, Flow::Wrapped)?;
         let layout =
             state
                 .factory
@@ -395,36 +587,28 @@ pub unsafe fn paragraph(
                 return;
             };
             let _ = (|| -> Result<()> {
-                let format = wrap_format(state, &font)?;
-                let _ = GdiFlush();
-                state.target.BindDC(dc, &clip)?;
-                let channel = |shift: u32| ((color.0 >> shift) & 0xff) as f32 / 255.0;
-                let brush = state.target.CreateSolidColorBrush(
-                    &D2D1_COLOR_F {
-                        r: channel(0),
-                        g: channel(8),
-                        b: channel(16),
-                        a: 1.0,
-                    },
-                    None,
-                )?;
-                state.target.BeginDraw();
-                let x = (left - clip.left) as f32;
-                let y = (top - clip.top) as f32;
-                state.target.DrawText(
+                let format = state.format(&font, Flow::Wrapped)?;
+                let layout = state.factory.CreateTextLayout(
                     text,
                     &format,
-                    &D2D_RECT_F {
-                        left: x,
-                        top: y,
-                        right: x + width as f32,
-                        bottom: y + 100_000.0,
-                    },
-                    &brush,
-                    D2D1_DRAW_TEXT_OPTIONS_CLIP,
-                    DWRITE_MEASURING_MODE_NATURAL,
-                );
-                state.target.EndDraw(None, None)
+                    width.max(1) as f32,
+                    100_000.0,
+                )?;
+                // Only the paragraph's own lines are copied through the bitmap, not the
+                // whole clip, which can be the full height of a license.
+                let mut metrics = DWRITE_TEXT_METRICS::default();
+                layout.GetMetrics(&mut metrics)?;
+                let slack = font.lfHeight.abs() / 2;
+                let bind = RECT {
+                    left: left.max(clip.left),
+                    top: (top - slack).max(clip.top),
+                    right: (left + width).min(clip.right),
+                    bottom: (top + metrics.height.ceil() as i32 + slack).min(clip.bottom),
+                };
+                if bind.right <= bind.left || bind.bottom <= bind.top {
+                    return std::result::Result::Ok(());
+                }
+                state.draw(dc, &layout, bind, (left as f32, top as f32), color)
             })();
         });
     }
@@ -440,57 +624,26 @@ unsafe fn draw_text(
     font: &LOGFONTW,
 ) -> Result<()> {
     unsafe {
-        let format = state.factory.CreateTextFormat(
-            PCWSTR(font.lfFaceName.as_ptr()),
-            None,
-            DWRITE_FONT_WEIGHT(font.lfWeight.clamp(1, 999)),
-            DWRITE_FONT_STYLE_NORMAL,
-            DWRITE_FONT_STRETCH_NORMAL,
-            font.lfHeight.unsigned_abs().max(1) as f32,
-            w!(""),
-        )?;
-        format.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP)?;
-        format.SetTextAlignment(if center {
-            DWRITE_TEXT_ALIGNMENT_CENTER
-        } else {
-            DWRITE_TEXT_ALIGNMENT_LEADING
-        })?;
-        format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
-        let ellipsis = state.factory.CreateEllipsisTrimmingSign(&format)?;
-        format.SetTrimming(
-            &DWRITE_TRIMMING {
-                granularity: DWRITE_TRIMMING_GRANULARITY_CHARACTER,
-                ..Default::default()
+        let format = state.format(
+            font,
+            if center {
+                Flow::Centered
+            } else {
+                Flow::Leading
             },
-            &ellipsis,
         )?;
-        // Finish queued GDI backgrounds before Direct2D writes to the same DC.
-        let _ = GdiFlush();
-        state.target.BindDC(dc, &bind)?;
-        let channel = |shift: u32| ((color.0 >> shift) & 0xff) as f32 / 255.0;
-        let brush = state.target.CreateSolidColorBrush(
-            &D2D1_COLOR_F {
-                r: channel(0),
-                g: channel(8),
-                b: channel(16),
-                a: 1.0,
-            },
-            None,
-        )?;
-        state.target.BeginDraw();
-        state.target.DrawText(
+        let layout = state.factory.CreateTextLayout(
             text,
             &format,
-            &D2D_RECT_F {
-                left: (rect.left - bind.left) as f32,
-                top: (rect.top - bind.top) as f32,
-                right: (rect.right - bind.left) as f32,
-                bottom: (rect.bottom - bind.top) as f32,
-            },
-            &brush,
-            D2D1_DRAW_TEXT_OPTIONS_CLIP,
-            DWRITE_MEASURING_MODE_NATURAL,
-        );
-        state.target.EndDraw(None, None)
+            (rect.right - rect.left) as f32,
+            (rect.bottom - rect.top) as f32,
+        )?;
+        state.draw(
+            dc,
+            &layout,
+            bind,
+            (rect.left as f32, rect.top as f32),
+            color,
+        )
     }
 }
