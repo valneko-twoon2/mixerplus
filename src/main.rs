@@ -35,6 +35,12 @@ fn harden() {
 
 fn main() {
     harden();
+    // Read by the installer for the Settings > Apps entry; the executable has no
+    // version resource.
+    if std::env::args().any(|arg| arg == "--version") {
+        println!("{}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
     if std::env::args().any(|arg| arg == "--check-ui") {
         if let Err(error) = ui::run() {
             eprintln!("UI check failed: {error}");

@@ -42,16 +42,20 @@ try {
     # List the app in Settings > Apps; this only touches the current user's hive.
     $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\MixerPlus'
     $null = New-Item -Path $key -Force
-    $version = (Get-Item -LiteralPath $target).VersionInfo.ProductVersion
+    # Settings > Apps can hide entries without a version, so ask the executable.
+    $version = (& $target --version | Out-String).Trim()
     $command = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $Directory 'uninstall.ps1')`" -Directory `"$Directory`""
     $values = @{
         DisplayName = 'MixerPlus'; DisplayVersion = $version; Publisher = 'MixerPlus'
         InstallLocation = $Directory; DisplayIcon = $target; UninstallString = $command
+        InstallDate = (Get-Date -Format 'yyyyMMdd')
     }
     foreach ($name in $values.Keys) {
         if ($values[$name]) { Set-ItemProperty -Path $key -Name $name -Value $values[$name] }
     }
     Set-ItemProperty -Path $key -Name NoModify -Value 1 -Type DWord
+    $size = [int][Math]::Ceiling((Get-Item -LiteralPath $target).Length / 1KB)
+    Set-ItemProperty -Path $key -Name EstimatedSize -Value $size -Type DWord
     Set-ItemProperty -Path $key -Name NoRepair -Value 1 -Type DWord
     # Start at sign-in, so MixerPlus stays in the tray. Presets never apply by themselves.
     $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
