@@ -4,7 +4,6 @@
 
 **A tiny tray volume mixer for Windows 10/11 that looks like the sound flyout.**
 
-[![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows11&logoColor=white)](#install)
 [![Rust](https://img.shields.io/badge/Rust-native%20Win32-DEA584?logo=rust&logoColor=black)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 

@@ -4,7 +4,6 @@
 
 **Windows 11 のサウンドのフライアウトそっくりな、小さなトレイ音量ミキサー。**
 
-[![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows11&logoColor=white)](#インストール)
 [![Rust](https://img.shields.io/badge/Rust-native%20Win32-DEA584?logo=rust&logoColor=black)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 
