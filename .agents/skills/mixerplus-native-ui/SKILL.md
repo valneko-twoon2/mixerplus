@@ -65,7 +65,7 @@ description: Rules for mixerplus's Win32 tray icon and popup - child controls, c
 
 ## About window
 
-- `about.rs` is one custom-painted top-level window laid out like a Settings page
+- `about.rs` (with `about/`) is one custom-painted top-level window laid out like a Settings page
   (large title, cards on a flat background; no icon or footer). The tray menu opens
   it on the license (*mixerplus について*) or on the Credits list (*Credits*); a
   crate's license is a third view with a back button. It is owned by a hidden `STATIC`
