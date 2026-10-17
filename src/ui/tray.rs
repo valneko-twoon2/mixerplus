@@ -222,10 +222,32 @@ impl App {
                 let mut point = POINT::default();
                 GetCursorPos(&mut point)?;
                 let _ = SetForegroundWindow(self.hwnd);
+                // The cursor is on the taskbar, so anchor the menu to the edge of the work
+                // area beside it, on whichever side the taskbar is, as the shell's menus are.
+                let mut monitor = MONITORINFO {
+                    cbSize: size_of::<MONITORINFO>() as u32,
+                    ..Default::default()
+                };
+                let mut align = TPM_RIGHTALIGN | TPM_BOTTOMALIGN;
+                if GetMonitorInfoW(
+                    MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST),
+                    &mut monitor,
+                )
+                .as_bool()
+                {
+                    let work = monitor.rcWork;
+                    if point.y < work.top {
+                        align = (align & !TPM_BOTTOMALIGN) | TPM_TOPALIGN;
+                    }
+                    if point.x < work.left {
+                        align = (align & !TPM_RIGHTALIGN) | TPM_LEFTALIGN;
+                    }
+                    point.x = point.x.clamp(work.left, work.right);
+                    point.y = point.y.clamp(work.top, work.bottom);
+                }
                 let chosen = TrackPopupMenu(
                     menu,
-                    // TPM_WORKAREA keeps the menu above the taskbar, like the shell's menus.
-                    TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTALIGN | TPM_BOTTOMALIGN | TPM_WORKAREA,
+                    TPM_RETURNCMD | TPM_NONOTIFY | align,
                     point.x,
                     point.y,
                     None,
