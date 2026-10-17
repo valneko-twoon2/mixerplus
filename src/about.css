@@ -40,6 +40,8 @@ html {
 body {
   margin: 0;
   display: flex;
+  /* On a wide window the navigation and content stay together in the middle. */
+  justify-content: center;
   min-height: 100vh;
   background: var(--background);
   color: var(--text);
@@ -51,7 +53,7 @@ nav {
   top: 0;
   align-self: flex-start;
   flex: none;
-  width: 260px;
+  width: 200px;
   padding: 16px 8px;
 }
 
