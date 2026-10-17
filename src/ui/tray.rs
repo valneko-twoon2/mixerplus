@@ -2,6 +2,9 @@
 
 use super::*;
 
+/// The icon's tooltip, and the tray menu's first entry, which opens the popup.
+const TRAY_TITLE: &str = "mixerplus — 音量ミキサー";
+
 /// Moves mixerplus out of the Windows 11 overflow area the first time Explorer records it.
 /// Returns true once its entry exists; an existing IsPromoted value is the user's choice.
 fn promote_tray_icon() -> bool {
@@ -132,7 +135,7 @@ impl App {
             hIcon: self.icon,
             ..Default::default()
         };
-        let tip = wide("mixerplus — 音量ミキサー");
+        let tip = wide(TRAY_TITLE);
         // Keep the terminating NUL when a longer tip is ever configured.
         let length = tip.len().min(data.szTip.len());
         data.szTip[..length].copy_from_slice(&tip[..length]);
@@ -199,8 +202,10 @@ impl App {
     pub(super) fn tray_menu(&mut self) -> Result<()> {
         // The menu runs its own message loop, which would stall a sliding popup.
         self.hide_now();
-        let entries = [(2, "About"), (1, "Exit")];
+        let entries = [(4, TRAY_TITLE), (2, "About"), (1, "Exit")];
         match self.menu(&entries)? {
+            // The first entry carries the icon's tooltip text and opens the popup.
+            4 => self.open()?,
             // The About page opens outside the App borrow, from the message loop.
             2 => unsafe { PostMessageW(Some(self.hwnd), SHOW_ABOUT, WPARAM(0), LPARAM(0))? },
             1 => unsafe { PostMessageW(Some(self.hwnd), WM_CLOSE, WPARAM(0), LPARAM(0))? },

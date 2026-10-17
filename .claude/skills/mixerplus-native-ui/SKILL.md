@@ -117,7 +117,7 @@ description: Rules for mixerplus's Win32 tray icon and popup - child controls, c
   glyph in the theme accent color. Its coverage is rendered over the matching
   taskbar shade before becoming alpha, so weight matches the system icons. It is regenerated on
   theme changes. Left-click toggles the popup; right-click shows the tray menu
-  (`tray_menu`), which hides the popup first because the menu runs its own
+  (`tray_menu`: the tooltip title, which opens the popup, then About and Exit), which hides the popup first because the menu runs its own
   message loop and would stall a sliding popup.
 - Device list selection changes update item flags in place (`REFRESH_STATE`);
   only list changes rebuild, and visible rebuilds run inside `quietly`, which
