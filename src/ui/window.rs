@@ -206,6 +206,7 @@ impl App {
     fn command(&mut self, id: usize) -> Result<()> {
         match id {
             BACK => self.show_view(View::Mixer)?,
+            OUTPUT_CHEVRON | INPUT_CHEVRON => self.toggle_devices(id == INPUT_CHEVRON)?,
             PRESETS_BUTTON => self.show_view(View::Presets)?,
             NEW_PRESET => {
                 self.edit = Some(EditState {
@@ -243,6 +244,7 @@ impl App {
                     .devices
                     .iter()
                     .find(|(item, _)| unsafe { GetDlgCtrlID(*item) as usize == id })
+                    .filter(|(_, device)| !device.selected)
                 {
                     let result = self.audio.set_default(&device.id);
                     // Refresh even after a failure so the list shows the actual default.
@@ -255,20 +257,9 @@ impl App {
             id if id >= ROW_ID => {
                 let index = (id - ROW_ID) / 3;
                 match (id - ROW_ID) % 3 {
-                    1 if self
-                        .controls
-                        .get(index)
-                        .is_some_and(|c| c.kind != Kind::Device) =>
-                    {
+                    1 if index < self.controls.len() => {
                         self.controls[index].row.volume.toggle_mute()?;
                         self.update_control(index);
-                    }
-                    2 => {
-                        if let Some(Kind::Endpoint { input }) =
-                            self.controls.get(index).map(|c| c.kind)
-                        {
-                            self.toggle_devices(input)?;
-                        }
                     }
                     _ => {}
                 }

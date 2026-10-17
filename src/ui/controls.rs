@@ -314,11 +314,10 @@ impl App {
             }
             set_text(control.value, &level.to_string());
             match control.kind {
-                Kind::Endpoint { input } => {
+                Kind::Device { input } => {
                     crate::appearance::set_glyph(control.mute, endpoint_glyph(input, level, muted))
                 }
                 Kind::App => crate::appearance::set_flag(control.mute, muted),
-                Kind::Device => {}
             }
         }
         let tip = format!(

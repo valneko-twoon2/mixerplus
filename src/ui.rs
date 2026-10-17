@@ -50,11 +50,13 @@ const REFRESH_STATE: u32 = WM_APP + 4;
 const MORE: usize = 12;
 const BACK: usize = 15;
 const SETTINGS_LINK: usize = 16;
-/// Each mixer row uses three IDs: slider, mute button, and device chevron.
+/// Each mixer row uses two IDs: slider and mute button, three apart.
 const ROW_ID: usize = 100;
 const DEVICE_ID: usize = 1000;
 const SPATIAL_ID: usize = 2000;
 const EDIT_ID: usize = 19;
+const OUTPUT_CHEVRON: usize = 20;
+const INPUT_CHEVRON: usize = 21;
 const PRESETS_BUTTON: usize = 17;
 const NEW_PRESET: usize = 18;
 /// Each preset row uses four IDs: apply, favorite, rename, and delete.
@@ -148,18 +150,16 @@ impl Class {
 
 #[derive(Clone, Copy, PartialEq)]
 enum Kind {
-    /// Default output or input row: glyph mute button and device chevron.
-    Endpoint { input: bool },
+    /// An output or input device: glyph mute button, and a list item that makes it
+    /// the default.
+    Device { input: bool },
     /// Application row: icon mute button with a badge.
     App,
-    /// Volume of one device in the device list.
-    Device,
 }
 
 struct Control {
     row: Row,
     slider: HWND,
-    /// Mute button, or the device list item for device rows.
     mute: HWND,
     kind: Kind,
     /// Volume value beside the slider, a mixerplus addition to the shell layout.
@@ -245,10 +245,9 @@ impl Drop for Fonts {
 
 /// What the mixer view shows.
 struct MixerState {
-    /// Default endpoint rows tagged `input`.
-    endpoints: Vec<(bool, Row)>,
     apps: Vec<Row>,
-    /// Expanded device lists tagged `input`.
+    /// Output then input devices tagged `input`: every device of an expanded group,
+    /// only the default one of a collapsed group.
     lists: Vec<(bool, Vec<Device>)>,
     /// Spatial sound of the default output while its device list is expanded.
     spatial: Option<Spatial>,

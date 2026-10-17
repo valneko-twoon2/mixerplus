@@ -27,14 +27,15 @@ description: Rules for mixerplus's Win32 tray icon and popup - child controls, c
   no gradients or custom themes beyond the system light/dark palette and accent
   in `appearance.rs`. The volume value beside each slider is a deliberate mixerplus
   addition.
-- Views: `View::Presets` (see `mixerplus-presets`) and `View::Mixer`: endpoint rows,
-  each with a chevron that expands its default-device list (a volume slider per
-  device) inline, then the section header and application rows. Each group is titled
-  above its default row (出力デバイス, 入力デバイス), expanded or not. The expanded output list
-  ends with the output's spatial sound formats (立体音響). The group after an expanded
-  list starts with a divider so output and input stay apart. The expanded
-  state is remembered in `settings.json` (`settings.rs`). View changes and chevron
-  toggles are posted as `REFRESH_PAGE` so the clicked button's notification unwinds first.
+- Views: `View::Presets` (see `mixerplus-presets`) and `View::Mixer`: an output and an
+  input group, then the section header and application rows. A group is a title with
+  a chevron (`OUTPUT_CHEVRON`, `INPUT_CHEVRON`) and device rows: an item that makes the
+  device the default, a glyph mute button, and the device's own volume. Collapsed, a
+  group shows only its default device; expanded, every device, and the output group
+  ends with its spatial sound formats (立体音響). The input group starts below a
+  divider. The expanded state is remembered in `settings.json` (`settings.rs`). View
+  changes and chevron toggles are posted as `REFRESH_PAGE` so the clicked button's
+  notification unwinds first.
 - Row controls are children of the viewport (`ui/scroll.rs`), a control-parent child
   window at the popup's client origin that clips them and forwards their notifications
   to the popup; the footer link stays a direct child. The mixer scrolls by pixels with

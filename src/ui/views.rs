@@ -17,25 +17,25 @@ fn device_glyph(form: u32, input: bool) -> u16 {
 }
 
 impl App {
-    /// Default output and input rows, one row per application, the expanded device
-    /// lists, and the output's spatial sound when its list is expanded.
+    /// One row per application, the output and input devices (only the default one
+    /// of a collapsed group), and the output's spatial sound when its group is expanded.
     fn snapshot(&self) -> Result<MixerState> {
         let mut state = MixerState {
-            endpoints: Vec::new(),
             apps: self.audio.sessions()?,
             lists: Vec::new(),
             spatial: None,
         };
         for (flow, input) in [(eRender, false), (eCapture, true)] {
-            if let Ok(row) = self.audio.endpoint(flow) {
-                if self.settings.shows_devices(input) {
-                    state.lists.push((input, self.audio.devices(flow)?));
-                    if !input {
-                        state.spatial = self.audio.spatial(&row.key);
-                    }
-                }
-                state.endpoints.push((input, row));
+            let mut devices = self.audio.devices(flow)?;
+            if devices.is_empty() {
+                continue;
             }
+            if !self.settings.shows_devices(input) {
+                devices.retain(|device| device.selected);
+            } else if !input && let Some(default) = devices.iter().find(|d| d.selected) {
+                state.spatial = self.audio.spatial(&default.id);
+            }
+            state.lists.push((input, devices));
         }
         Ok(state)
     }
@@ -48,10 +48,8 @@ impl App {
             View::Mixer => {
                 let mut state = self.snapshot()?;
                 let signature: Vec<_> = state
-                    .endpoints
+                    .apps
                     .iter()
-                    .map(|(_, r)| r)
-                    .chain(&state.apps)
                     .map(|r| format!("{}:{}", r.key, r.name))
                     .chain(state.lists.iter().flat_map(|(input, devices)| {
                         devices
@@ -72,7 +70,7 @@ impl App {
                         if let Some(control) = self
                             .controls
                             .iter_mut()
-                            .find(|c| c.kind == Kind::Device && c.row.key == device.id)
+                            .find(|c| c.kind != Kind::App && c.row.key == device.id)
                         {
                             control.row.meters = device.meter.clone().into_iter().collect();
                         }
@@ -84,11 +82,10 @@ impl App {
                         }
                     }
                     // Refresh COM handles as sessions can be replaced without changing their key.
-                    let mut rows: Vec<_> = state.endpoints.into_iter().map(|(_, r)| r).collect();
-                    rows.append(&mut state.apps);
+                    let rows = &mut state.apps;
                     for i in 0..self.controls.len() {
-                        // Device rows share keys with endpoint rows and keep their own handles.
-                        if self.controls[i].kind != Kind::Device
+                        // Device rows keep their endpoint handles.
+                        if self.controls[i].kind == Kind::App
                             && let Some(index) =
                                 rows.iter().position(|r| r.key == self.controls[i].row.key)
                         {
@@ -183,80 +180,24 @@ impl App {
 
     fn rebuild_mixer(&mut self, state: MixerState) -> Result<()> {
         let MixerState {
-            endpoints,
             apps,
-            mut lists,
+            lists,
             mut spatial,
         } = state;
         // Destroying the focused row leaves no focus for keyboard navigation.
         self.clear_rows();
         let restore_focus = unsafe { GetFocus().is_invalid() };
         let (title, icon, body) = (self.fonts.title, self.fonts.icon, self.fonts.body);
-        let has_endpoints = !endpoints.is_empty();
-        // An expanded list ends with a divider, so the next row is not read as part of it.
-        let mut after_list = false;
-        for (input, row) in endpoints {
-            let expanded = self.settings.shows_devices(input);
-            if !input {
-                self.spatial_device = row.key.clone();
+        let has_endpoints = !lists.is_empty();
+        for (index, (input, devices)) in lists.into_iter().enumerate() {
+            // The input group follows the output group below a divider.
+            self.group_heading(input, index > 0)?;
+            if !input && let Some(default) = devices.iter().find(|d| d.selected) {
+                self.spatial_device = default.id.clone();
             }
-            // Each group is titled above its default row, like the shell's pages.
-            self.heading(
-                if input {
-                    "入力デバイス"
-                } else {
-                    "出力デバイス"
-                },
-                after_list,
-            )?;
-            self.item(44, None, |app| {
-                let i = app.controls.len();
-                let mute = app.button(
-                    "",
-                    ROW_ID + i * 3 + 1,
-                    [8, 4, 40, 36],
-                    icon,
-                    pack(GLYPH, 0, false),
-                )?;
-                let slider = app.slider(ROW_ID + i * 3, [52, 6, 216, 32])?;
-                let value = app.label("", [268, 4, 40, 36], body, SECONDARY)?;
-                let chevron = app.button(
-                    "",
-                    ROW_ID + i * 3 + 2,
-                    [308, 4, 40, 36],
-                    icon,
-                    pack(
-                        GLYPH,
-                        if expanded { CHEVRON_UP } else { CHEVRON_DOWN },
-                        false,
-                    ),
-                )?;
-                app.tool(
-                    TTM_ADDTOOLW,
-                    chevron,
-                    match (input, expanded) {
-                        (false, false) => "出力デバイスを表示",
-                        (false, true) => "出力デバイスを隠す",
-                        (true, false) => "入力デバイスを表示",
-                        (true, true) => "入力デバイスを隠す",
-                    },
-                );
-                app.add_control(
-                    row,
-                    [slider, mute, value],
-                    Kind::Endpoint { input },
-                    HICON::default(),
-                );
-                Ok(())
-            })?;
-            after_list = false;
-            if let Some(index) = lists.iter().position(|(flow, _)| *flow == input) {
-                let (_, devices) = lists.remove(index);
-                self.device_items(devices, input)?;
-                if !input && let Some(spatial) = spatial.take() {
-                    self.spatial_items(spatial)?;
-                }
-                after_list = true;
+            self.device_items(devices, input)?;
+            if !input && let Some(spatial) = spatial.take() {
+                self.spatial_items(spatial)?;
             }
         }
         let (header_height, offset) = if has_endpoints { (49, 9) } else { (40, 0) };
@@ -322,11 +263,8 @@ impl App {
             return Ok(());
         }
         let chevron = self.refocus.take().and_then(|input| {
-            let index = self
-                .controls
-                .iter()
-                .position(|c| c.kind == Kind::Endpoint { input })?;
-            unsafe { GetDlgItem(Some(self.viewport), (ROW_ID + index * 3 + 2) as i32) }.ok()
+            let id = if input { INPUT_CHEVRON } else { OUTPUT_CHEVRON };
+            unsafe { GetDlgItem(Some(self.viewport), id as i32) }.ok()
         });
         let focus = chevron.or_else(|| restore_focus.then(|| self.first_visible_stop()).flatten());
         if let Some(focus) = focus {
@@ -337,20 +275,56 @@ impl App {
         Ok(())
     }
 
-    /// A section title, below a divider when `divided`.
-    fn heading(&mut self, text: &str, divided: bool) -> Result<()> {
+    /// A section title.
+    fn heading(&mut self, text: &str) -> Result<()> {
         let title = self.fonts.title;
+        self.item(38, None, |app| {
+            app.label(text, [16, 2, 328, 36], title, 0).map(|_| ())
+        })
+    }
+
+    /// The title of the output or input group, with the chevron that expands it from
+    /// the default device to every device. Below a divider when `divided`.
+    fn group_heading(&mut self, input: bool, divided: bool) -> Result<()> {
+        let (title, icon) = (self.fonts.title, self.fonts.icon);
+        let expanded = self.settings.shows_devices(input);
         let top = if divided { 9 } else { 0 };
-        self.item(top + 38, divided.then_some(4), |app| {
-            app.label(text, [16, top + 2, 328, 36], title, 0)
-                .map(|_| ())
+        self.item(top + 40, divided.then_some(4), |app| {
+            let text = if input {
+                "入力デバイス"
+            } else {
+                "出力デバイス"
+            };
+            app.label(text, [16, top + 2, 280, 36], title, 0)?;
+            let chevron = app.button(
+                "",
+                if input { INPUT_CHEVRON } else { OUTPUT_CHEVRON },
+                [308, top + 2, 40, 36],
+                icon,
+                pack(
+                    GLYPH,
+                    if expanded { CHEVRON_UP } else { CHEVRON_DOWN },
+                    false,
+                ),
+            )?;
+            app.tool(
+                TTM_ADDTOOLW,
+                chevron,
+                match (input, expanded) {
+                    (false, false) => "すべての出力デバイスを表示",
+                    (false, true) => "既定の出力デバイスだけを表示",
+                    (true, false) => "すべての入力デバイスを表示",
+                    (true, true) => "既定の入力デバイスだけを表示",
+                },
+            );
+            Ok(())
         })
     }
 
     /// The output's spatial sound formats, as in the quick settings output page.
     fn spatial_items(&mut self, spatial: Spatial) -> Result<()> {
         let body = self.fonts.body;
-        self.heading("立体音響", false)?;
+        self.heading("立体音響")?;
         for (format, name) in spatial.formats {
             let selected = format.eq_ignore_ascii_case(&spatial.current);
             let caption = match name {
@@ -373,9 +347,10 @@ impl App {
         Ok(())
     }
 
-    /// The default-device list under an endpoint row, with each device's own volume.
+    /// Device rows: an item that makes the device the default, and its own mute
+    /// button and volume.
     fn device_items(&mut self, devices: Vec<Device>, input: bool) -> Result<()> {
-        let body = self.fonts.body;
+        let (body, icon) = (self.fonts.body, self.fonts.icon);
         if devices.is_empty() {
             return self.item(40, None, |app| {
                 app.label("デバイスがありません", [16, 0, 328, 40], body, SECONDARY)
@@ -395,6 +370,13 @@ impl App {
                 // Each device keeps its own volume, independent of the default device.
                 if let Some(volume) = device.volume.clone() {
                     let index = app.controls.len();
+                    let mute = app.button(
+                        "",
+                        ROW_ID + index * 3 + 1,
+                        [6, 34, 32, 32],
+                        icon,
+                        pack(GLYPH, 0, false),
+                    )?;
                     let slider = app.slider(ROW_ID + index * 3, [40, 36, 264, 28])?;
                     let value = app.label("", [304, 34, 44, 32], body, SECONDARY)?;
                     let row = Row {
@@ -405,7 +387,12 @@ impl App {
                         meters: device.meter.clone().into_iter().collect(),
                         process: String::new(),
                     };
-                    app.add_control(row, [slider, item, value], Kind::Device, HICON::default());
+                    app.add_control(
+                        row,
+                        [slider, mute, value],
+                        Kind::Device { input },
+                        HICON::default(),
+                    );
                 }
                 app.devices.push((item, device));
                 Ok(())

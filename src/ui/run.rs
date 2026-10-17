@@ -324,12 +324,7 @@ fn check_scrolling(hwnd: HWND) -> Result<()> {
         let mut chevron = HWND::default();
         with_app(&mut |app| {
             listed = app.devices.len();
-            let index = app
-                .controls
-                .iter()
-                .position(|c| c.kind == Kind::Endpoint { input: false })
-                .ok_or_else(|| fail("The output row is missing"))?;
-            chevron = unsafe { GetDlgItem(Some(app.viewport), (ROW_ID + index * 3 + 2) as i32)? };
+            chevron = unsafe { GetDlgItem(Some(app.viewport), OUTPUT_CHEVRON as i32)? };
             Ok(())
         })?;
         unsafe {
@@ -348,9 +343,13 @@ fn check_scrolling(hwnd: HWND) -> Result<()> {
             }
         }
         with_app(&mut |app| {
-            // The input list may stay expanded; only the output devices come and go.
+            // A collapsed group keeps only its default device; with a single output
+            // the count cannot change.
             let shown = app.devices.len();
-            if app.settings.show_outputs == expanded && (shown > listed) == expanded {
+            let outputs = app.audio.devices(eRender).map_or(0, |d| d.len());
+            if app.settings.show_outputs == expanded
+                && (outputs < 2 || (shown > listed) == expanded)
+            {
                 Ok(())
             } else {
                 Err(fail("The chevron did not toggle the output device list"))
