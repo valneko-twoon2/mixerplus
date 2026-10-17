@@ -242,8 +242,10 @@ impl App {
                     if point.x < work.left {
                         align = (align & !TPM_RIGHTALIGN) | TPM_LEFTALIGN;
                     }
-                    point.x = point.x.clamp(work.left, work.right);
-                    point.y = point.y.clamp(work.top, work.bottom);
+                    // The popup keeps the same 12 px from the taskbar.
+                    let margin = 12 * GetDpiForWindow(self.hwnd).max(96) as i32 / 96;
+                    point.x = point.x.clamp(work.left + margin, work.right - margin);
+                    point.y = point.y.clamp(work.top + margin, work.bottom - margin);
                 }
                 let chosen = TrackPopupMenu(
                     menu,
