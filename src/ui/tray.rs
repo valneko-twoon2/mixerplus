@@ -1,6 +1,10 @@
 //! The notification icon: adding it to Explorer, promoting it on Windows 11, and its context menu.
 
 use super::*;
+use windows::{
+    Win32::System::LibraryLoader::{GetProcAddress, LOAD_LIBRARY_SEARCH_SYSTEM32, LoadLibraryExW},
+    core::PCSTR,
+};
 
 /// The icon's tooltip, and the tray menu's first entry, which opens the popup.
 const TRAY_TITLE: &str = "mixerplus — 音量ミキサー";
@@ -168,13 +172,52 @@ impl App {
         }
     }
 
-    fn menu(&self, entries: &[(usize, &str)]) -> Result<usize> {
+    /// Lets menus follow the system dark mode. Menus that carry item bitmaps are drawn
+    /// in the light theme otherwise. Both calls are unexported `uxtheme.dll` ordinals
+    /// (135 `SetPreferredAppMode`, 136 `FlushMenuThemes`); a missing one changes nothing.
+    fn follow_dark_mode() {
+        use std::sync::Once;
+        static ONCE: Once = Once::new();
+        ONCE.call_once(|| unsafe {
+            let Ok(module) = LoadLibraryExW(w!("uxtheme.dll"), None, LOAD_LIBRARY_SEARCH_SYSTEM32)
+            else {
+                return;
+            };
+            let set = GetProcAddress(module, PCSTR(135 as *const u8));
+            let flush = GetProcAddress(module, PCSTR(136 as *const u8));
+            if let (Some(set), Some(flush)) = (set, flush) {
+                // 1 is AllowDark: follow the system setting rather than force a mode.
+                let set: extern "system" fn(i32) -> i32 = std::mem::transmute(set);
+                let flush: extern "system" fn() = std::mem::transmute(flush);
+                set(1);
+                flush();
+            }
+        });
+    }
+
+    /// Shows a menu of (id, text, icon glyph, icon color) entries at the cursor and
+    /// returns the chosen id, or 0. Icons fill the menu's icon column like the shell's.
+    fn menu(&self, entries: &[(usize, &str, u16, COLORREF)]) -> Result<usize> {
+        Self::follow_dark_mode();
         unsafe {
             let menu = CreatePopupMenu()?;
+            let size = GetSystemMetricsForDpi(SM_CXSMICON, GetDpiForWindow(self.hwnd).max(96));
+            let mut icons = Vec::new();
             let result = (|| {
-                for (id, name) in entries {
-                    let name = wide(name);
-                    AppendMenuW(menu, MF_STRING, *id, PCWSTR(name.as_ptr()))?;
+                for &(id, name, glyph, color) in entries {
+                    let mut name = wide(name);
+                    name.push(0);
+                    let icon = crate::appearance::menu_icon(size, glyph, color);
+                    icons.extend(icon);
+                    let item = MENUITEMINFOW {
+                        cbSize: size_of::<MENUITEMINFOW>() as u32,
+                        fMask: MIIM_ID | MIIM_STRING | MIIM_BITMAP,
+                        wID: id as u32,
+                        dwTypeData: PWSTR(name.as_mut_ptr()),
+                        hbmpItem: icon.unwrap_or_default(),
+                        ..Default::default()
+                    };
+                    InsertMenuItemW(menu, u32::MAX, true, &item)?;
                 }
                 let mut point = POINT::default();
                 GetCursorPos(&mut point)?;
@@ -194,6 +237,10 @@ impl App {
                 Ok(chosen)
             })();
             let _ = DestroyMenu(menu);
+            // The menu does not own its item bitmaps.
+            for icon in icons {
+                let _ = DeleteObject(icon.into());
+            }
             result
         }
     }
@@ -202,7 +249,13 @@ impl App {
     pub(super) fn tray_menu(&mut self) -> Result<()> {
         // The menu runs its own message loop, which would stall a sliding popup.
         self.hide_now();
-        let entries = [(4, TRAY_TITLE), (2, "About"), (1, "Exit")];
+        let palette = crate::appearance::palette();
+        let entries = [
+            // The speaker is the tray icon's glyph, in its accent color.
+            (4, TRAY_TITLE, 0xe995, palette.accent),
+            (2, "About", 0xe946, palette.text),
+            (1, "Exit", 0xe7e8, palette.text),
+        ];
         match self.menu(&entries)? {
             // The first entry carries the icon's tooltip text and opens the popup.
             4 => self.open()?,

@@ -30,7 +30,7 @@ pub use controls::{
     draw_item, install_button, install_label, install_slider, recycle, set_app_icon, set_flag,
     set_glyph, set_icon_fonts, set_meter,
 };
-pub use icon::tray_icon;
+pub use icon::{menu_icon, tray_icon};
 use transition::compose;
 pub use transition::{
     Capture, capture, end_transition, set_transition_progress, snapshot, start_transition,
@@ -77,6 +77,10 @@ pub struct Palette {
 }
 
 /// The current light or dark palette, for other native windows in the same style.
+pub fn palette() -> Palette {
+    PALETTE.get()
+}
+
 // Approximations of the flyout acrylic and the WinUI control fills on it.
 const LIGHT: Palette = Palette {
     dark: false,

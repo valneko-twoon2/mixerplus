@@ -117,8 +117,13 @@ description: Rules for mixerplus's Win32 tray icon and popup - child controls, c
   glyph in the theme accent color. Its coverage is rendered over the matching
   taskbar shade before becoming alpha, so weight matches the system icons. It is regenerated on
   theme changes. Left-click toggles the popup; right-click shows the tray menu
-  (`tray_menu`: the tooltip title, which opens the popup, then About and Exit), which hides the popup first because the menu runs its own
-  message loop and would stall a sliding popup.
+  (`tray_menu`: the tooltip title, which opens the popup, then About and Exit), which hides the popup first
+  because the menu runs its own message loop and would stall a sliding popup.
+  Each entry has an icon in the menu's icon column like the shell's audio menu (`menu_icon`:
+  a Fluent glyph as a premultiplied bitmap; the title row uses the tray speaker in the
+  accent color). Menus with item bitmaps draw in the light theme unless the process calls
+  `SetPreferredAppMode(AllowDark)` (`follow_dark_mode`, unexported `uxtheme.dll` ordinals
+  135 and 136), so keep that call when touching the menu.
 - Device list selection changes update item flags in place (`REFRESH_STATE`);
   only list changes rebuild, and visible rebuilds run inside `quietly`, which
   suspends redraw so view switches do not flicker.

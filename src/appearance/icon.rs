@@ -74,6 +74,51 @@ unsafe fn glyph_coverage(
     }
 }
 
+/// A menu item's icon: one glyph in `color` as a premultiplied 32-bit bitmap, the
+/// format menus draw with alpha. The caller deletes it after the menu is destroyed.
+pub fn menu_icon(size: i32, glyph: u16, color: COLORREF) -> Option<HBITMAP> {
+    let dark = PALETTE.get().dark;
+    unsafe {
+        let full = RECT {
+            left: 0,
+            top: 0,
+            right: size,
+            bottom: size,
+        };
+        let alpha = glyph_coverage(size, glyph, size as f32 * 0.9, full, dark)?;
+        let info = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: size,
+                biHeight: -size,
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut bits = std::ptr::null_mut();
+        let bitmap = CreateDIBSection(None, &info, DIB_RGB_COLORS, &mut bits, None, 0).ok()?;
+        let pixels = std::slice::from_raw_parts_mut(bits.cast::<u8>(), (size * size * 4) as usize);
+        let premultiply = |channel: u32, alpha: u8| (channel * alpha as u32 / 255) as u8;
+        let (red, green, blue) = (
+            color.0 & 0xff,
+            (color.0 >> 8) & 0xff,
+            (color.0 >> 16) & 0xff,
+        );
+        for (pixel, &alpha) in pixels.as_chunks_mut::<4>().0.iter_mut().zip(&alpha) {
+            pixel.copy_from_slice(&[
+                premultiply(blue, alpha),
+                premultiply(green, alpha),
+                premultiply(red, alpha),
+                alpha,
+            ]);
+        }
+        Some(bitmap)
+    }
+}
+
 /// The taskbar speaker glyph in the theme's accent color, with the weight of the
 /// system icons for the taskbar's light or dark shade.
 pub fn tray_icon(size: i32) -> Option<HICON> {
