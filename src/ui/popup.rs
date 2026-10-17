@@ -120,9 +120,10 @@ impl App {
             self.work_area = monitor.rcWork;
             self.monitor = monitor.rcMonitor;
             let height = (monitor.rcWork.bottom - monitor.rcWork.top) as f32 / scale;
-            // Fixed parts: margins, padding, and the footer.
+            // Fixed parts: margins, padding, the pinned header, and the footer.
+            let header = if self.hotkey { scroll::HEADER } else { 0 };
             self.content_limit =
-                ((height - 88.0) as i32).clamp(44, crate::config::MAX_CONTENT_HEIGHT);
+                ((height - 88.0) as i32 - header).clamp(44, crate::config::MAX_CONTENT_HEIGHT);
             self.view = View::Mixer;
             self.edit = None;
             self.armed_delete = None;

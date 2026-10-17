@@ -340,6 +340,10 @@ struct App {
     icon: HICON,
     /// The child window that holds and clips the rows; chrome stays outside it.
     viewport: HWND,
+    /// Logical height of the pinned header above the viewport, 0 when it is hidden.
+    header: i32,
+    /// The header's title and key caps, shown only while the mixer has the header.
+    header_windows: Vec<HWND>,
     /// Mixer rows and headers in order.
     items: Vec<Item>,
     /// How far the mixer rows are scrolled, and where a wheel glide is heading, in

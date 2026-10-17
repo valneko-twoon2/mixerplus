@@ -167,6 +167,8 @@ unsafe fn run_initialized() -> Result<()> {
             fonts: Fonts::new(scale),
             icon,
             viewport: HWND::default(),
+            header: 0,
+            header_windows: Vec::new(),
             items: Vec::new(),
             scroll: 0,
             scroll_target: 0,

@@ -264,6 +264,10 @@ impl App {
         crate::appearance::set_viewport(self.viewport);
         // Painted before the rows in captures, as on screen.
         self.children.push(self.viewport);
+        // The pinned header, like the shell's output page: it stays while rows scroll.
+        let title = self.label("音声出力", [16, 2, 72, 36], self.fonts.body, 0)?;
+        let keys = self.keycaps("Win+Alt+V", [92, 2, 140, 36])?;
+        self.header_windows = vec![title, keys];
         self.button(
             "その他の音量設定",
             SETTINGS_LINK,
@@ -273,6 +277,16 @@ impl App {
         )?;
         self.chrome_count = self.children.len();
         Ok(())
+    }
+
+    /// Shows the pinned header with this logical `height`, or hides it for 0.
+    pub(super) fn show_header(&mut self, height: i32) {
+        self.header = height;
+        for &hwnd in &self.header_windows {
+            unsafe {
+                let _ = ShowWindow(hwnd, if height > 0 { SW_SHOWNA } else { SW_HIDE });
+            }
+        }
     }
 
     /// Removes the current view's rows; chrome keeps its window identities. Rows are

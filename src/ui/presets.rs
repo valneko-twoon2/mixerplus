@@ -5,6 +5,8 @@ use super::*;
 impl App {
     pub(super) fn rebuild_presets(&mut self, device_name: String) -> Result<()> {
         self.clear_rows();
+        // The preset page has its own title row instead of the pinned header.
+        self.show_header(0);
         crate::appearance::set_edit_frame(None);
         let (body, title, icon) = (self.fonts.body, self.fonts.title, self.fonts.icon);
         self.button(

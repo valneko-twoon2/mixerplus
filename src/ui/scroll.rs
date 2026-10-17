@@ -7,6 +7,8 @@ use windows::Win32::Graphics::Dwm::DwmFlush;
 /// Logical padding above the first mixer row and below the last.
 pub(super) const CONTENT_TOP: i32 = 8;
 const CONTENT_BOTTOM: i32 = 8;
+/// Logical height of the pinned header with the shortcut hint.
+pub(super) const HEADER: i32 = 40;
 /// Logical distance one wheel notch scrolls, about one row like the shell flyout.
 const NOTCH: i32 = 48;
 /// How long a wheel or page scroll eases out.
@@ -84,6 +86,8 @@ impl App {
     /// visible part; the viewport clips rows that are partly scrolled out.
     pub(super) fn place_items(&mut self) -> Result<()> {
         let total: i32 = self.items.iter().map(|item| item.height).sum();
+        // Without the shortcut there is nothing to pin.
+        self.show_header(if self.hotkey { HEADER } else { 0 });
         let footer = CONTENT_TOP + total.min(self.content_limit) + CONTENT_BOTTOM;
         self.content_height = self.px(CONTENT_TOP + total + CONTENT_BOTTOM);
         self.viewport_height = self.px(footer);
@@ -109,7 +113,7 @@ impl App {
                 }
             }
         }
-        self.finish_layout(footer, self.dividers())?;
+        self.finish_layout(self.header + footer, self.dividers())?;
         self.show_scrollbar();
         Ok(())
     }
@@ -244,7 +248,8 @@ impl App {
         if self.view != View::Mixer || max == 0 {
             return None;
         }
-        let (top, bottom) = (4, (self.viewport_height as f32 / self.scale) as i32 - 4);
+        let top = self.header + 4;
+        let bottom = self.header + (self.viewport_height as f32 / self.scale) as i32 - 4;
         let length = bottom - top;
         let thumb = (length * self.viewport_height / self.content_height.max(1)).max(16);
         let thumb_top = top + (length - thumb) * self.scroll / max;
@@ -272,7 +277,7 @@ impl App {
                 left: self.px(width - SCROLLBAR_WIDTH),
                 top: 0,
                 right: self.px(width),
-                bottom: self.viewport_height,
+                bottom: self.px(self.header) + self.viewport_height,
             };
             let _ = InvalidateRect(Some(self.hwnd), Some(&strip), false);
         }

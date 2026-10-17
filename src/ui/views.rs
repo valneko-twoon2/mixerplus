@@ -311,12 +311,7 @@ impl App {
             } else {
                 "出力デバイス"
             };
-            // The label stays narrow so it does not paint over the key caps.
-            let label = if input || !app.hotkey { 240 } else { 92 };
-            app.label(text, [16, top + 2, label, 36], title, 0)?;
-            if !input && app.hotkey {
-                app.keycaps("Win+Alt+V", [112, top + 2, 140, 36])?;
-            }
+            app.label(text, [16, top + 2, 240, 36], title, 0)?;
             if let Some(volume) = volume {
                 let button = app.button(
                     "",
@@ -434,16 +429,17 @@ impl App {
 
     /// Places the footer at `footer` and anchors the popup above the taskbar.
     pub(super) fn finish_layout(&mut self, footer: i32, dividers: Vec<i32>) -> Result<()> {
-        crate::appearance::set_layout(self.px(footer), dividers);
+        crate::appearance::set_layout(self.px(footer), dividers, self.px(self.header));
         unsafe {
-            // Rows scroll and clip inside the viewport; the scroll bar strip stays outside.
+            // Rows scroll and clip inside the viewport below the pinned header; the
+            // scroll bar strip stays outside.
             SetWindowPos(
                 self.viewport,
                 None,
                 0,
-                0,
+                self.px(self.header),
                 self.px(crate::config::POPUP_WIDTH - SCROLLBAR_WIDTH),
-                self.px(footer),
+                self.px(footer - self.header),
                 SWP_NOZORDER | SWP_NOACTIVATE,
             )?;
             if let Some(link) = self.children.get(self.chrome_count.saturating_sub(1)) {

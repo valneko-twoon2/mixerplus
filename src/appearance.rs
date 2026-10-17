@@ -123,7 +123,10 @@ const DARK: Palette = Palette {
 #[derive(Default)]
 struct Layout {
     footer: i32,
+    /// Divider rows, relative to the top of the row viewport.
     dividers: Vec<i32>,
+    /// Where the row viewport starts in the popup, below the pinned header.
+    top: i32,
     /// The scroll position indicator at the popup's right edge.
     scrollbar: Option<RECT>,
     /// The rounded frame behind an inline text box, in popup client pixels.
@@ -181,11 +184,12 @@ pub fn load_theme() {
 
 /// Records the footer top and section divider rows in popup client pixels, and
 /// removes the scroll bar.
-pub fn set_layout(footer: i32, dividers: Vec<i32>) {
+pub fn set_layout(footer: i32, dividers: Vec<i32>, top: i32) {
     LAYOUT.with(|layout| {
         let mut layout = layout.borrow_mut();
         layout.footer = footer;
         layout.dividers = dividers;
+        layout.top = top;
         layout.scrollbar = None;
     });
 }
@@ -295,7 +299,18 @@ unsafe fn background_sized(hwnd: HWND, dc: HDC, size: Option<(i32, i32)>) {
                         palette.footer,
                     );
                 }
-                for &y in layout.dividers.iter().chain([layout.footer].iter()) {
+                // The viewport paints its own dividers; the popup's lie below the header.
+                let offset = if hwnd == VIEWPORT.get() {
+                    0
+                } else {
+                    layout.top
+                };
+                for y in layout
+                    .dividers
+                    .iter()
+                    .map(|y| y + offset)
+                    .chain([layout.footer])
+                {
                     if y > 0 {
                         fill(
                             dc,
