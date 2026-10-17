@@ -8,7 +8,7 @@ try {
     $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath artifacts/mixerplus.exe).Hash.ToLower()
     [IO.File]::WriteAllText("$PWD/artifacts/mixerplus.exe.sha256", $hash, [Text.Encoding]::ASCII)
     # artifacts/ holds exactly the GitHub release assets. The license and third-party
-    # notices are embedded in the executable (About > Credits).
+    # notices are embedded in the executable (tray menu > About).
     foreach ($file in @('install.ps1', 'uninstall.ps1')) {
         Copy-Item -LiteralPath "scripts/$file" -Destination artifacts -Force
     }

@@ -115,7 +115,7 @@ installed copy, and starts the latest release build from `src/target/release/`.
 Agents use it after diagnostics instead of restarting the installed copy.
 
 `THIRD-PARTY-NOTICES.txt` lists the crates in the release executable and is shown
-in the app (tray menu > Credits). After changing dependencies run
+in the app (tray menu > About > Credits). After changing dependencies run
 `pwsh -File scripts/update-notices.ps1`; the validator fails while it is stale.
 
 Setup installs repository-local Git hooks. Pre-commit rejects invalid line

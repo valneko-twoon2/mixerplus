@@ -93,16 +93,19 @@ description: Rules for mixerplus's Win32 tray icon and popup - child controls, c
 - Every custom paint goes through an offscreen `Frame` to avoid flicker. Shapes
   and icons use GDI+. Flush GDI before GDI+ or DirectWrite draws on a DC.
 
-## About window
+## About page
 
-- `about.rs` (with `about/`) is one custom-painted top-level window laid out like a Settings page
-  (large title, cards on a flat background; no icon or footer). The tray menu opens
-  it on the license (*mixerplus について*) or on the Credits list (*Credits*); a
-  crate's license is a third view with a back button. It is owned by a hidden `STATIC`
-  window so it has no taskbar button; keep that owner when changing creation.
-- Its scrolling content is rendered once into an offscreen bitmap (`Cache`) and
-  only copied while scrolling; anything that changes the content must be part of
-  `CacheKey`. The caption text and icon are hidden with `SetWindowThemeAttribute`.
+- The tray menu's *About* writes one self-contained HTML page (`about.rs`, styled by
+  `about.css`, switched by `about.js`) to `%TEMP%\mixerplusbout.html` and opens it
+  with `ShellExecuteW` in the default browser. It is not a WebView: mixerplus hosts no
+  web content. The page imitates a Settings page (navigation pane, large title, cards)
+  and follows the browser's light or dark scheme with the Windows accent shades.
+- Sections are switched by URL fragment: `#about` (license), `#credits` (bundled crates
+  from `THIRD-PARTY-NOTICES.txt`), and `#crate-<index>` (one crate's license, with a
+  back link). Returning to Credits restores its scroll position.
+- Everything is inline and a Content-Security-Policy forbids loading anything; the
+  only outside links are the crates.io pages, opened in a new tab. Escape every text
+  taken from the license files with `escape`.
 - The executable's version resource (`build.rs`) names the product `mixerplus`, the
   same as the binary; keep `FileDescription`, `ProductName`, and `InternalName` equal.
 - The popup has an empty window title (except with `--inspect-ui`) so Task Manager

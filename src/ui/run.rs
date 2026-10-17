@@ -266,9 +266,6 @@ unsafe fn run_initialized() -> Result<()> {
             if status == 0 {
                 break;
             }
-            if crate::about::dispatch(&message) {
-                continue;
-            }
             if message.message == WM_KEYDOWN && message.wParam.0 == VK_ESCAPE_CODE {
                 let _ = PostMessageW(Some(hwnd), DISMISS, WPARAM(0), LPARAM(0));
                 continue;

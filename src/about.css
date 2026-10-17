@@ -1,0 +1,259 @@
+/* The About page, styled like a Windows 11 Settings page. Colors follow the
+   browser's light or dark scheme; the accent shades come from Windows. */
+:root {
+  color-scheme: light dark;
+  --background: #f3f3f3;
+  --card: #fbfbfb;
+  --border: #e5e5e5;
+  --hover: rgba(0, 0, 0, 0.037);
+  --pressed: rgba(0, 0, 0, 0.024);
+  --button: #fdfdfd;
+  --button-border: #d6d6d6;
+  --text: #1a1a1a;
+  --secondary: #5d5d5d;
+  --accent: var(--accent-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #202020;
+    --card: #2b2b2b;
+    --border: #1d1d1d;
+    --hover: rgba(255, 255, 255, 0.06);
+    --pressed: rgba(255, 255, 255, 0.04);
+    --button: #373737;
+    --button-border: #303030;
+    --text: #ffffff;
+    --secondary: #c5c5c5;
+    --accent: var(--accent-dark);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
+}
+
+body {
+  margin: 0;
+  display: flex;
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--text);
+  font: 14px/1.45 "Segoe UI Variable Text", "Segoe UI", "Yu Gothic UI", sans-serif;
+}
+
+nav {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  flex: none;
+  width: 260px;
+  padding: 16px 8px;
+}
+
+nav .app {
+  padding: 4px 12px 16px;
+  font-size: 12px;
+  color: var(--secondary);
+}
+
+nav a {
+  position: relative;
+  display: block;
+  margin: 2px 0;
+  padding: 8px 12px 8px 16px;
+  border-radius: 4px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+nav a:hover {
+  background: var(--hover);
+}
+
+nav a.current {
+  background: var(--hover);
+}
+
+nav a.current::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+main {
+  flex: 1;
+  min-width: 0;
+  max-width: 1000px;
+  padding: 16px 32px 40px 24px;
+}
+
+section {
+  display: none;
+}
+
+section.current {
+  display: block;
+}
+
+h1 {
+  margin: 4px 0 0;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 40px;
+}
+
+h2 {
+  margin: 24px 0 8px 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+h3 {
+  margin: 16px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--secondary);
+}
+
+h3:first-child {
+  margin-top: 0;
+}
+
+.subtitle {
+  margin: 0 0 16px;
+  font-size: 12px;
+  color: var(--secondary);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.text {
+  padding: 12px 16px;
+  overflow-wrap: anywhere;
+}
+
+.text p {
+  margin: 0 0 10px;
+}
+
+.text p:last-child {
+  margin-bottom: 0;
+}
+
+.credits {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.credits li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 64px;
+  margin-bottom: 4px;
+  padding: 8px 16px;
+}
+
+.credits li > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  font-size: 12px;
+  color: var(--secondary);
+}
+
+.button {
+  flex: none;
+  padding: 5px 12px;
+  border: 1px solid var(--button-border);
+  border-radius: 4px;
+  background: var(--button);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.button:hover {
+  background: var(--hover);
+}
+
+.button:active {
+  background: var(--pressed);
+  color: var(--secondary);
+}
+
+.titled {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.back {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 36px;
+  margin-top: 6px;
+  border-radius: 6px;
+  color: var(--text);
+  text-decoration: none;
+  font: 16px "Segoe Fluent Icons", "Segoe MDL2 Assets";
+}
+
+.back:hover {
+  background: var(--hover);
+}
+
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@media (max-width: 640px) {
+  body {
+    display: block;
+  }
+
+  nav {
+    position: static;
+    width: auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 12px 16px 0;
+  }
+
+  nav .app {
+    width: 100%;
+    padding: 0 0 4px;
+  }
+
+  main {
+    padding: 8px 16px 32px;
+  }
+
+  .credits li {
+    flex-wrap: wrap;
+  }
+}

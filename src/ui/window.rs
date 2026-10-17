@@ -20,8 +20,8 @@ pub(super) unsafe extern "system" fn window_proc(
             }
             WM_ERASEBKGND => return LRESULT(1),
             SHOW_ABOUT => {
-                if crate::about::show(wparam.0 == 1).is_err() {
-                    show_error("ウィンドウを開けませんでした。");
+                if crate::about::show(hwnd).is_err() {
+                    show_error("About ページを開けませんでした。");
                 }
                 return LRESULT(0);
             }

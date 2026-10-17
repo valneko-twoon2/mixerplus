@@ -26,7 +26,7 @@
 - **Scrolling**: when many apps play sound, scroll the mixer with the mouse wheel or drag the scroll bar.
 - **Presets**: save the current volumes and mute states (output, input, every app) under a name and apply them later with one click. Nothing is applied automatically.
 - **Native look**: follows the system light/dark mode and accent color. Pure Win32, no runtime to install.
-- **Open source credits**: right-click the tray icon: *mixerplus について* shows the license and *Credits* lists every bundled library with its license.
+- **Open source credits**: right-click the tray icon and choose *About* to open a page in your browser with the license and, under *Credits*, every bundled library with its license.
 
 ## Install
 
@@ -48,4 +48,4 @@ Building from source: see [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## License
 
-MIT. See [LICENSE](LICENSE). Third-party licenses are listed in [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) and in the app (right-click the tray icon > *Credits*).
+MIT. See [LICENSE](LICENSE). Third-party licenses are listed in [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) and in the app (right-click the tray icon > *About* > *Credits*).

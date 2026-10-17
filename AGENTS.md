@@ -19,9 +19,8 @@ sidebar, themes, WebView, or a .NET runtime dependency.
   `src/appearance/` are `controls` (buttons, sliders, labels), `transition` (captured bitmaps,
   view cross-fade, local preview export), and `icon` (the generated tray icon).
 - `src/drawing.rs`: DirectWrite text, GDI+ geometry, and icon resampling.
-- `src/about.rs` and `src/about/`: About and Credits window in the Settings-app style (application
-  license, bundled crates). Submodules: `window` (creation, window procedure), `layout` (geometry,
-  hit testing), `paint` (theme, cached content), `input` (keys, scrolling), `notices` (text parsing).
+- `src/about.rs` with `about.css` and `about.js`: the About page (application license, bundled
+  crates), a self-contained HTML file written to the temporary folder and opened in the browser.
 - `scripts/`: build, validation, harness synchronization, and hook entry points.
 - `README.md`, `README.ja.md`: short user-facing guides. `DEVELOPMENT.md`: build,
   release, and harness notes.

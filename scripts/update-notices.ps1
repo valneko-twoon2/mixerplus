@@ -6,7 +6,7 @@ $target = Join-Path $root 'THIRD-PARTY-NOTICES.txt'
 
 # The notices cover every crate that ships in the release executable: the normal
 # (non-build, non-dev) dependency closure of the application for the Windows target.
-# The application embeds this file and lists it under Credits, so it must track Cargo.lock.
+# The application embeds this file and lists it on its About page, so it must track Cargo.lock.
 $json = cargo metadata --manifest-path (Join-Path $root 'src/Cargo.toml') --locked --format-version 1 --filter-platform x86_64-pc-windows-msvc
 if ($LASTEXITCODE -ne 0) { throw 'cargo metadata failed.' }
 $metadata = $json | ConvertFrom-Json

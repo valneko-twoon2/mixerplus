@@ -18,7 +18,7 @@ description: Maintain mixerplus's agent harness - AGENTS.md, skills and their mi
   `core.autocrlf` as a substitute for attributes. Fix endings with
   `pwsh -File scripts/check-line-endings.ps1 -Fix`.
 - `THIRD-PARTY-NOTICES.txt` is generated from the release dependency closure and is
-  embedded in the application as its Credits list. After any change to
+  embedded in the application and listed on its About page under Credits. After any change to
   `src/Cargo.toml` or `src/Cargo.lock`, run `pwsh -File scripts/update-notices.ps1`
   and commit the result; validation fails while it is stale. Do not hand-edit it.
 - Local hooks are guardrails, not an immutable security boundary. Do not claim

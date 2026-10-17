@@ -199,12 +199,10 @@ impl App {
     pub(super) fn tray_menu(&mut self) -> Result<()> {
         // The menu runs its own message loop, which would stall a sliding popup.
         self.hide_now();
-        let entries = [(2, "mixerplus について"), (3, "Credits"), (1, "終了")];
+        let entries = [(2, "About"), (1, "Exit")];
         match self.menu(&entries)? {
-            // The About window is created outside the App borrow, from the message loop.
-            id @ (2 | 3) => unsafe {
-                PostMessageW(Some(self.hwnd), SHOW_ABOUT, WPARAM(id - 2), LPARAM(0))?
-            },
+            // The About page opens outside the App borrow, from the message loop.
+            2 => unsafe { PostMessageW(Some(self.hwnd), SHOW_ABOUT, WPARAM(0), LPARAM(0))? },
             1 => unsafe { PostMessageW(Some(self.hwnd), WM_CLOSE, WPARAM(0), LPARAM(0))? },
             _ => {}
         }

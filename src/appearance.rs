@@ -77,10 +77,6 @@ pub struct Palette {
 }
 
 /// The current light or dark palette, for other native windows in the same style.
-pub fn palette() -> Palette {
-    PALETTE.get()
-}
-
 // Approximations of the flyout acrylic and the WinUI control fills on it.
 const LIGHT: Palette = Palette {
     dark: false,
@@ -140,6 +136,49 @@ thread_local! {
     static VIEWPORT: Cell<HWND> = const { Cell::new(HWND(std::ptr::null_mut())) };
 }
 
+/// The system accent shades, eight RGBA entries from light to dark.
+fn accent_palette() -> Option<[u8; 32]> {
+    let mut accent = [0u8; 32];
+    let mut size = accent.len() as u32;
+    unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            w!("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Accent"),
+            w!("AccentPalette"),
+            RRF_RT_REG_BINARY,
+            None,
+            Some(accent.as_mut_ptr().cast()),
+            Some(&mut size),
+        )
+        .ok()
+        .ok()?;
+    }
+    (size as usize == accent.len()).then_some(accent)
+}
+
+/// Byte offset of the accent shade for a theme: light mode uses the first darker
+/// shade, dark mode the second lighter one.
+fn accent_index(dark: bool) -> usize {
+    (if dark { 1 } else { 4 }) * 4
+}
+
+/// The accent for light and dark backgrounds as CSS colors, for the About page.
+pub fn accent_shades() -> (String, String) {
+    let shade = |dark: bool| match accent_palette() {
+        Some(accent) => {
+            let i = accent_index(dark);
+            format!(
+                "#{:02x}{:02x}{:02x}",
+                accent[i],
+                accent[i + 1],
+                accent[i + 2]
+            )
+        }
+        None => if dark { "#60cdff" } else { "#005fb8" }.to_string(),
+    };
+    (shade(false), shade(true))
+}
+
 /// Reads the system light/dark mode and accent color, as the shell flyouts do.
 pub fn load_theme() {
     unsafe {
@@ -155,22 +194,8 @@ pub fn load_theme() {
             Some(&mut size),
         );
         let mut palette = if light != 0 { LIGHT } else { DARK };
-        let mut accent = [0u8; 32];
-        let mut size = accent.len() as u32;
-        if RegGetValueW(
-            HKEY_CURRENT_USER,
-            w!("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Accent"),
-            w!("AccentPalette"),
-            RRF_RT_REG_BINARY,
-            None,
-            Some(accent.as_mut_ptr().cast()),
-            Some(&mut size),
-        )
-        .is_ok()
-            && size as usize == accent.len()
-        {
-            // Light mode uses the first darker shade; dark mode the second lighter one.
-            let i = if palette.dark { 1 } else { 4 } * 4;
+        if let Some(accent) = accent_palette() {
+            let i = accent_index(palette.dark);
             palette.accent = rgb(accent[i], accent[i + 1], accent[i + 2]);
         }
         PALETTE.set(palette);
