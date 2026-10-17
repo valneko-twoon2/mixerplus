@@ -172,33 +172,40 @@ impl App {
         }
     }
 
-    /// Lets menus follow the system dark mode. Menus that carry item bitmaps are drawn
-    /// in the light theme otherwise. Both calls are unexported `uxtheme.dll` ordinals
+    /// Draws menus in the palette's light or dark theme, the one their icons are
+    /// colored for. Menus that carry item bitmaps are drawn in the light theme
+    /// otherwise, and the system's own choice is cached at startup, so it is set
+    /// again before every menu. Both calls are unexported `uxtheme.dll` ordinals
     /// (135 `SetPreferredAppMode`, 136 `FlushMenuThemes`); a missing one changes nothing.
-    fn follow_dark_mode() {
-        use std::sync::Once;
-        static ONCE: Once = Once::new();
-        ONCE.call_once(|| unsafe {
-            let Ok(module) = LoadLibraryExW(w!("uxtheme.dll"), None, LOAD_LIBRARY_SEARCH_SYSTEM32)
-            else {
-                return;
-            };
-            let set = GetProcAddress(module, PCSTR(135 as *const u8));
-            let flush = GetProcAddress(module, PCSTR(136 as *const u8));
-            if let (Some(set), Some(flush)) = (set, flush) {
-                // 1 is AllowDark: follow the system setting rather than force a mode.
-                let set: extern "system" fn(i32) -> i32 = std::mem::transmute(set);
-                let flush: extern "system" fn() = std::mem::transmute(flush);
-                set(1);
-                flush();
-            }
+    fn match_menu_theme(dark: bool) {
+        type Calls = Option<(extern "system" fn(i32) -> i32, extern "system" fn())>;
+        static CALLS: std::sync::OnceLock<Calls> = std::sync::OnceLock::new();
+        let calls = CALLS.get_or_init(|| unsafe {
+            let module =
+                LoadLibraryExW(w!("uxtheme.dll"), None, LOAD_LIBRARY_SEARCH_SYSTEM32).ok()?;
+            let set = GetProcAddress(module, PCSTR(135 as *const u8))?;
+            let flush = GetProcAddress(module, PCSTR(136 as *const u8))?;
+            Some((
+                std::mem::transmute::<
+                    unsafe extern "system" fn() -> isize,
+                    extern "system" fn(i32) -> i32,
+                >(set),
+                std::mem::transmute::<unsafe extern "system" fn() -> isize, extern "system" fn()>(
+                    flush,
+                ),
+            ))
         });
+        if let Some((set, flush)) = calls {
+            // 2 is ForceDark and 3 ForceLight.
+            set(if dark { 2 } else { 3 });
+            flush();
+        }
     }
 
     /// Shows a menu of (id, text, icon glyph, icon color) entries at the cursor and
     /// returns the chosen id, or 0. Icons fill the menu's icon column like the shell's.
     fn menu(&self, entries: &[(usize, &str, u16, COLORREF)]) -> Result<usize> {
-        Self::follow_dark_mode();
+        Self::match_menu_theme(crate::appearance::palette().dark);
         unsafe {
             let menu = CreatePopupMenu()?;
             let size = GetSystemMetricsForDpi(SM_CXSMICON, GetDpiForWindow(self.hwnd).max(96));

@@ -121,9 +121,10 @@ description: Rules for mixerplus's Win32 tray icon and popup - child controls, c
   because the menu runs its own message loop and would stall a sliding popup.
   Each entry has an icon in the menu's icon column like the shell's audio menu (`menu_icon`:
   a Fluent glyph as a premultiplied bitmap; the title row uses the tray speaker in the
-  accent color). Menus with item bitmaps draw in the light theme unless the process calls
-  `SetPreferredAppMode(AllowDark)` (`follow_dark_mode`, unexported `uxtheme.dll` ordinals
-  135 and 136), so keep that call when touching the menu.
+  accent color). Menus with item bitmaps draw in the light theme unless the process sets
+  `SetPreferredAppMode` (`match_menu_theme`, unexported `uxtheme.dll` ordinals 135 and 136).
+  It forces the palette's mode and flushes menu themes before every menu, since the
+  icons are colored for the palette and the system's choice is cached at startup.
 - Device list selection changes update item flags in place (`REFRESH_STATE`);
   only list changes rebuild, and visible rebuilds run inside `quietly`, which
   suspends redraw so view switches do not flicker.
