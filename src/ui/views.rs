@@ -266,8 +266,9 @@ impl App {
                 if !icon_handle.is_invalid() {
                     unsafe { crate::appearance::set_app_icon(mute, icon_handle) };
                 }
-                let slider = app.slider(ROW_ID + i * 3, [52, 6, 256, 32])?;
-                let value = app.label("", [308, 4, 40, 36], body, SECONDARY)?;
+                // The level sits between the icon and the slider, like the Windows mixer.
+                let value = app.label("", [48, 4, 36, 36], body, SECONDARY)?;
+                let slider = app.slider(ROW_ID + i * 3, [88, 6, 256, 32])?;
                 app.add_control(row, [slider, mute, value], Kind::App, icon_handle);
                 Ok(())
             })?;
