@@ -257,7 +257,11 @@ impl App {
             id if id >= ROW_ID => {
                 let index = (id - ROW_ID) / 3;
                 match (id - ROW_ID) % 3 {
-                    1 if index < self.controls.len() => {
+                    1 if self
+                        .controls
+                        .get(index)
+                        .is_some_and(|c| c.kind == Kind::App) =>
+                    {
                         self.controls[index].row.volume.toggle_mute()?;
                         self.update_control(index);
                     }

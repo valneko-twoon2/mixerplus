@@ -195,11 +195,6 @@ pub unsafe fn set_flag(hwnd: HWND, flag: bool) {
     unsafe { update_data(hwnd, 1 << 24, (flag as isize) << 24) }
 }
 
-/// Updates a button's glyph, repainting only on change.
-pub unsafe fn set_glyph(hwnd: HWND, glyph: u16) {
-    unsafe { update_data(hwnd, 0xffff << 8, (glyph as isize) << 8) }
-}
-
 unsafe extern "system" fn button_proc(
     hwnd: HWND,
     message: u32,

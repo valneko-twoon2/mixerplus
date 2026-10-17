@@ -87,9 +87,7 @@ const MAX_SPARE: usize = 96;
 
 // Segoe Fluent Icons code points.
 const SPEAKER: u16 = 0xe7f5;
-const MUTED: u16 = 0xe74f;
 const MICROPHONE: u16 = 0xe720;
-const MICROPHONE_OFF: u16 = 0xec54;
 const PRESET_GLYPH: u16 = 0xf4c3;
 const ADD_GLYPH: u16 = 0xe710;
 const STAR_GLYPH: u16 = 0xe734;
@@ -150,9 +148,8 @@ impl Class {
 
 #[derive(Clone, Copy, PartialEq)]
 enum Kind {
-    /// An output or input device: glyph mute button, and a list item that makes it
-    /// the default.
-    Device { input: bool },
+    /// An output or input device; its list item makes it the default.
+    Device,
     /// Application row: icon mute button with a badge.
     App,
 }
@@ -160,6 +157,7 @@ enum Kind {
 struct Control {
     row: Row,
     slider: HWND,
+    /// Mute button, or the device list item for device rows.
     mute: HWND,
     kind: Kind,
     /// Volume value beside the slider, a mixerplus addition to the shell layout.

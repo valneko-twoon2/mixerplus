@@ -30,7 +30,7 @@ description: Rules for mixerplus's Win32 tray icon and popup - child controls, c
 - Views: `View::Presets` (see `mixerplus-presets`) and `View::Mixer`: an output and an
   input group, then the section header and application rows. A group is a title with
   a chevron (`OUTPUT_CHEVRON`, `INPUT_CHEVRON`) and device rows: an item that makes the
-  device the default, a glyph mute button, and the device's own volume. Collapsed, a
+  device the default and the device's own volume (no mute button). Collapsed, a
   group shows only its default device; expanded, every device, and the output group
   ends with its spatial sound formats (立体音響). The input group starts below a
   divider. The expanded state is remembered in `settings.json` (`settings.rs`). View
@@ -50,7 +50,7 @@ description: Rules for mixerplus's Win32 tray icon and popup - child controls, c
   handles its mouse messages: drag the thumb (with capture), press the track to page,
   and hover to widen it.
 - Owner-drawn buttons pack their kind, Fluent glyph, and selection/mute flag in
-  `GWLP_USERDATA` (`appearance::pack`). Use `set_glyph`/`set_flag` for updates.
+  `GWLP_USERDATA` (`appearance::pack`). Use `set_flag` for updates.
 - Sliders show a live peak meter (`IAudioMeterInformation`, polled every 33 ms
   while the popup is visible and stored in a window property). Keep polling cheap:
   repaint only when the quantized value changes.

@@ -2,18 +2,6 @@
 
 use super::*;
 
-fn endpoint_glyph(input: bool, level: i32, muted: bool) -> u16 {
-    match (input, muted, level) {
-        (true, true, _) => MICROPHONE_OFF,
-        (true, false, _) => MICROPHONE,
-        (false, true, _) => MUTED,
-        (false, false, 0) => 0xe992,
-        (false, false, 1..=33) => 0xe993,
-        (false, false, 34..=66) => 0xe994,
-        _ => 0xe995,
-    }
-}
-
 impl App {
     fn child(
         &mut self,
@@ -314,10 +302,8 @@ impl App {
             }
             set_text(control.value, &level.to_string());
             match control.kind {
-                Kind::Device { input } => {
-                    crate::appearance::set_glyph(control.mute, endpoint_glyph(input, level, muted))
-                }
                 Kind::App => crate::appearance::set_flag(control.mute, muted),
+                Kind::Device => {}
             }
         }
         let tip = format!(

@@ -347,10 +347,9 @@ impl App {
         Ok(())
     }
 
-    /// Device rows: an item that makes the device the default, and its own mute
-    /// button and volume.
+    /// Device rows: an item that makes the device the default, and its own volume.
     fn device_items(&mut self, devices: Vec<Device>, input: bool) -> Result<()> {
-        let (body, icon) = (self.fonts.body, self.fonts.icon);
+        let body = self.fonts.body;
         if devices.is_empty() {
             return self.item(40, None, |app| {
                 app.label("デバイスがありません", [16, 0, 328, 40], body, SECONDARY)
@@ -370,13 +369,6 @@ impl App {
                 // Each device keeps its own volume, independent of the default device.
                 if let Some(volume) = device.volume.clone() {
                     let index = app.controls.len();
-                    let mute = app.button(
-                        "",
-                        ROW_ID + index * 3 + 1,
-                        [6, 34, 32, 32],
-                        icon,
-                        pack(GLYPH, 0, false),
-                    )?;
                     let slider = app.slider(ROW_ID + index * 3, [40, 36, 264, 28])?;
                     let value = app.label("", [304, 34, 44, 32], body, SECONDARY)?;
                     let row = Row {
@@ -387,12 +379,7 @@ impl App {
                         meters: device.meter.clone().into_iter().collect(),
                         process: String::new(),
                     };
-                    app.add_control(
-                        row,
-                        [slider, mute, value],
-                        Kind::Device { input },
-                        HICON::default(),
-                    );
+                    app.add_control(row, [slider, item, value], Kind::Device, HICON::default());
                 }
                 app.devices.push((item, device));
                 Ok(())
