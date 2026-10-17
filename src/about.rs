@@ -84,18 +84,18 @@ fn page() -> String {
          <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
          <meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; \
          style-src 'unsafe-inline'; script-src 'unsafe-inline'\">\n\
-         <title>mixerplus について</title>\n<style>\n:root {{ --accent-light: {light}; \
+         <title>About</title>\n<style>\n:root {{ --accent-light: {light}; \
          --accent-dark: {dark}; }}\n{STYLE}</style>\n</head>\n<body>\n"
     );
     html.push_str(
         "<nav>\n<div class=\"app\">mixerplus</div>\n\
-         <a href=\"#about\" data-page=\"about\">mixerplus について</a>\n\
+         <a href=\"#about\" data-page=\"about\">About</a>\n\
          <a href=\"#credits\" data-page=\"credits\">Credits</a>\n</nav>\n<main>\n",
     );
 
     let _ = write!(
         html,
-        "<section id=\"about\">\n<h1>mixerplus について</h1>\n\
+        "<section id=\"about\">\n<h1>About</h1>\n\
          <p class=\"subtitle\">バージョン {}</p>\n<h2>ライセンス</h2>\n<div class=\"card text\">\n",
         env!("CARGO_PKG_VERSION")
     );
