@@ -8,6 +8,10 @@ use std::{
     },
 };
 use windows::{
+    Media::Audio::{
+        SetDefaultSpatialAudioFormatStatus, SpatialAudioDeviceConfiguration,
+        SpatialAudioFormatSubtype,
+    },
     Win32::UI::Shell::{IShellItem2, SHCreateItemFromParsingName, SHLoadIndirectString},
     Win32::{
         Devices::FunctionDiscovery::PKEY_Device_FriendlyName,
@@ -29,8 +33,19 @@ use windows::{
             },
         },
     },
-    core::{GUID, HRESULT, IUnknown_Vtbl, Interface, PCWSTR, PWSTR, Result, implement},
+    core::{GUID, HRESULT, HSTRING, IUnknown_Vtbl, Interface, PCWSTR, PWSTR, Result, implement},
 };
+
+/// The spatial sound subtype that turns spatial sound off.
+pub const SPATIAL_OFF: &str = "{00000000-0000-0000-0000-000000000000}";
+
+/// The spatial sound choices of an output, as the quick settings list shows them.
+pub struct Spatial {
+    /// Format subtypes with their names, starting with [`SPATIAL_OFF`].
+    pub formats: Vec<(String, &'static str)>,
+    /// The format the user selected for the output.
+    pub current: String,
+}
 
 #[derive(Clone)]
 pub enum Volume {
@@ -216,6 +231,8 @@ pub struct Audio {
     changes: Arc<AtomicU32>,
     client: IMMNotificationClient,
     endpoints: RefCell<Option<Endpoints>>,
+    /// The spatial sound configuration of the last output asked about.
+    spatial: RefCell<Option<(String, SpatialAudioDeviceConfiguration)>>,
 }
 
 impl Drop for Audio {
@@ -244,6 +261,7 @@ impl Audio {
             changes,
             client,
             endpoints: RefCell::new(None),
+            spatial: RefCell::new(None),
         })
     }
 
@@ -550,6 +568,99 @@ impl Audio {
                 .ok()?;
             }
             Ok(())
+        }
+    }
+
+    fn spatial_configuration(&self, id: &str) -> Result<SpatialAudioDeviceConfiguration> {
+        let busy = || windows::core::Error::from_hresult(HRESULT(0x80004005u32 as i32));
+        let mut cache = self.spatial.try_borrow_mut().map_err(|_| busy())?;
+        if let Some((cached, configuration)) = cache.as_ref()
+            && cached == id
+        {
+            return Ok(configuration.clone());
+        }
+        // WinRT names an endpoint by its device interface path (KSCATEGORY_AUDIO render).
+        let path = format!(r"\\?\SWD#MMDEVAPI#{id}#{{e6327cad-dcec-4949-ae8a-991e976a79d2}}");
+        let configuration = SpatialAudioDeviceConfiguration::GetForDeviceId(&HSTRING::from(path))?;
+        *cache = Some((id.to_owned(), configuration.clone()));
+        Ok(configuration)
+    }
+
+    /// Spatial sound for the output `id`: off, Windows Sonic, and the current format.
+    /// Dolby and DTS report support whether or not their apps are installed, so they
+    /// are listed only when selected, like the shell does without those apps.
+    pub fn spatial(&self, id: &str) -> Option<Spatial> {
+        let configuration = self.spatial_configuration(id).ok()?;
+        if !configuration.IsSpatialAudioSupported().ok()? {
+            return None;
+        }
+        let current = configuration.DefaultSpatialAudioFormat().ok()?.to_string();
+        let known = [
+            (
+                SpatialAudioFormatSubtype::WindowsSonic(),
+                "Windows Sonic for Headphones",
+            ),
+            (
+                SpatialAudioFormatSubtype::DolbyAtmosForHeadphones(),
+                "Dolby Atmos for Headphones",
+            ),
+            (
+                SpatialAudioFormatSubtype::DolbyAtmosForHomeTheater(),
+                "Dolby Atmos for home theater",
+            ),
+            (
+                SpatialAudioFormatSubtype::DolbyAtmosForSpeakers(),
+                "Dolby Atmos for built-in speakers",
+            ),
+            (
+                SpatialAudioFormatSubtype::DTSHeadphoneX(),
+                "DTS Headphone:X",
+            ),
+            (SpatialAudioFormatSubtype::DTSXUltra(), "DTS Sound Unbound"),
+            (
+                SpatialAudioFormatSubtype::DTSXForHomeTheater(),
+                "DTS:X for home theater",
+            ),
+        ];
+        let mut formats = vec![(SPATIAL_OFF.to_owned(), "")];
+        for (i, (subtype, name)) in known.into_iter().enumerate() {
+            let Ok(subtype) = subtype else { continue };
+            let selected = subtype.to_string().eq_ignore_ascii_case(&current);
+            let offered = i == 0
+                && configuration
+                    .IsSpatialAudioFormatSupported(&subtype)
+                    .unwrap_or(false);
+            if offered || selected {
+                formats.push((subtype.to_string(), name));
+            }
+        }
+        if !formats
+            .iter()
+            .any(|(f, _)| f.eq_ignore_ascii_case(&current))
+        {
+            formats.push((current.clone(), "?"));
+        }
+        Some(Spatial { formats, current })
+    }
+
+    /// Selects a spatial sound format for the output `id`; [`SPATIAL_OFF`] turns it off.
+    pub fn set_spatial(&self, id: &str, format: &str) -> Result<()> {
+        let configuration = self.spatial_configuration(id)?;
+        // The audio service completes the operation on another thread.
+        let status = configuration
+            .SetDefaultSpatialAudioFormatAsync(&HSTRING::from(format))?
+            .join()?
+            .Status()?;
+        if status == SetDefaultSpatialAudioFormatStatus::Succeeded {
+            Ok(())
+        } else {
+            Err(windows::core::Error::new(
+                HRESULT(0x80004005u32 as i32),
+                format!(
+                    "Windows refused the spatial sound format (status {}).",
+                    status.0
+                ),
+            ))
         }
     }
 }

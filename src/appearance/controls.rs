@@ -83,22 +83,28 @@ pub unsafe fn draw_item(item: &DRAWITEMSTRUCT) {
                         palette.accent,
                     );
                 }
-                draw(
-                    icon_font,
-                    &glyph,
-                    RECT {
-                        left: rect.left + px(12.0),
-                        right: rect.left + px(32.0),
-                        ..rect
-                    },
-                    true,
-                    color,
-                );
+                // Items without a glyph, such as spatial sound formats, start at the edge.
+                let indent = if glyph[0] == 0 {
+                    12.0
+                } else {
+                    draw(
+                        icon_font,
+                        &glyph,
+                        RECT {
+                            left: rect.left + px(12.0),
+                            right: rect.left + px(32.0),
+                            ..rect
+                        },
+                        true,
+                        color,
+                    );
+                    44.0
+                };
                 draw(
                     font,
                     caption,
                     RECT {
-                        left: rect.left + px(44.0),
+                        left: rect.left + px(indent),
                         right: rect.right - px(8.0),
                         ..rect
                     },

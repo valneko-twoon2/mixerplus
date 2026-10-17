@@ -176,15 +176,20 @@ pub fn load_theme() {
     }
 }
 
-/// Records the footer top, section divider rows, and scroll indicator in popup
-/// client pixels.
-pub fn set_layout(footer: i32, dividers: Vec<i32>, scrollbar: Option<RECT>) {
+/// Records the footer top and section divider rows in popup client pixels, and
+/// removes the scroll bar.
+pub fn set_layout(footer: i32, dividers: Vec<i32>) {
     LAYOUT.with(|layout| {
         let mut layout = layout.borrow_mut();
         layout.footer = footer;
         layout.dividers = dividers;
-        layout.scrollbar = scrollbar;
+        layout.scrollbar = None;
     });
+}
+
+/// Draws the scroll bar thumb at `rect` in popup client pixels, or removes it.
+pub fn set_scrollbar(rect: Option<RECT>) {
+    LAYOUT.with(|layout| layout.borrow_mut().scrollbar = rect);
 }
 
 /// Draws a focused text box frame at `rect` behind an EDIT control, or removes it.

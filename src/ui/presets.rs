@@ -112,7 +112,7 @@ impl App {
         if let (Some(state), Some(hwnd)) = (self.edit.as_mut(), focus) {
             state.hwnd = hwnd;
         }
-        self.finish_layout(y + 8, Vec::new(), None)?;
+        self.finish_layout(y + 8, Vec::new())?;
         if let Some(hwnd) = focus
             && unsafe { GetForegroundWindow() } == self.hwnd
         {

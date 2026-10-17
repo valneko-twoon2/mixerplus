@@ -21,7 +21,7 @@ use windows::{
 
 use crate::{
     appearance::{GLYPH, ITEM, LINK, SECONDARY, pack},
-    audio::{Audio, Device, Row},
+    audio::{Audio, Device, Row, SPATIAL_OFF, Spatial},
     presets::{PresetStore, sanitize_name},
     settings::Settings,
 };
@@ -52,6 +52,7 @@ const SETTINGS_LINK: usize = 16;
 /// Each mixer row uses three IDs: slider, mute button, and device chevron.
 const ROW_ID: usize = 100;
 const DEVICE_ID: usize = 1000;
+const SPATIAL_ID: usize = 2000;
 const EDIT_ID: usize = 19;
 const PRESETS_BUTTON: usize = 17;
 const NEW_PRESET: usize = 18;
@@ -235,8 +236,32 @@ impl Drop for Fonts {
     }
 }
 
-/// Default endpoint rows tagged `input`, application rows, then the expanded device lists.
-type Snapshot = (Vec<(bool, Row)>, Vec<Row>, Vec<(bool, Vec<Device>)>);
+/// What the mixer view shows.
+struct MixerState {
+    /// Default endpoint rows tagged `input`.
+    endpoints: Vec<(bool, Row)>,
+    apps: Vec<Row>,
+    /// Expanded device lists tagged `input`.
+    lists: Vec<(bool, Vec<Device>)>,
+    /// Spatial sound of the default output while its device list is expanded.
+    spatial: Option<Spatial>,
+}
+
+/// The mixer's scroll bar while its rows overflow, in logical pixels.
+#[derive(Clone, Copy)]
+struct Track {
+    top: i32,
+    bottom: i32,
+    thumb_top: i32,
+    thumb_bottom: i32,
+}
+
+/// A scroll bar drag: the pointer and thumb tops when the thumb was grabbed.
+#[derive(Clone, Copy)]
+struct Drag {
+    pointer: i32,
+    thumb: i32,
+}
 
 /// The old view's pixels and window rectangle, captured before a view change.
 struct Pending {
@@ -275,6 +300,10 @@ struct App {
     // Declared after the controls that use them so windows are destroyed first.
     controls: Vec<Control>,
     devices: Vec<(HWND, Device)>,
+    /// Spatial sound buttons with their format subtypes.
+    spatial: Vec<(HWND, String)>,
+    /// The output that the spatial sound buttons configure.
+    spatial_device: String,
     children: Vec<HWND>,
     /// Hidden row windows from earlier pages, reused before creating new ones.
     spare: Vec<(Class, HWND)>,
@@ -289,6 +318,10 @@ struct App {
     wheel_rest: i32,
     /// Tallest the scrolling content may be, in logical pixels.
     content_limit: i32,
+    track: Option<Track>,
+    drag: Option<Drag>,
+    /// Whether the pointer is over the scroll bar, which widens it.
+    track_hot: bool,
     signature: Vec<String>,
     taskbar_created: u32,
     scale: f32,

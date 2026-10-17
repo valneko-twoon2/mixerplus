@@ -82,6 +82,22 @@ pub(super) unsafe extern "system" fn window_proc(
                     }
                 }
                 WM_MOUSEWHEEL => app.wheel((wparam.0 >> 16) as i16),
+                WM_LBUTTONDOWN => app.track_press(lparam),
+                WM_MOUSEMOVE => app.track_move(lparam),
+                WM_LBUTTONUP => {
+                    app.track_release(app.track_hot);
+                    Ok(())
+                }
+                WM_CAPTURECHANGED => {
+                    // Capture taken away by another window ends the drag without releasing.
+                    app.drag = None;
+                    app.track_release(app.track_hot);
+                    Ok(())
+                }
+                WM_MOUSELEAVE if app.drag.is_none() => {
+                    app.track_release(false);
+                    Ok(())
+                }
                 WM_HSCROLL => {
                     if let Some(index) = app
                         .controls
@@ -200,6 +216,20 @@ impl App {
                 // Like the shell flyout, the gear opens the volume mixer settings.
                 self.dismiss();
                 self.open_settings(w!("ms-settings:apps-volume"))?;
+            }
+            id if id >= SPATIAL_ID => {
+                if let Some((_, format)) = self
+                    .spatial
+                    .iter()
+                    .find(|(button, _)| unsafe { GetDlgCtrlID(*button) as usize == id })
+                {
+                    let result = self.audio.set_spatial(&self.spatial_device, format);
+                    // Refresh even after a failure so the list shows the actual format.
+                    unsafe {
+                        PostMessageW(Some(self.hwnd), REFRESH_STATE, WPARAM(0), LPARAM(0))?;
+                    }
+                    result?;
+                }
             }
             id if id >= DEVICE_ID => {
                 if let Some((_, device)) = self

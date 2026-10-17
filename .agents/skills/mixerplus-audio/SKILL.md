@@ -28,5 +28,10 @@ description: Rules for mixerplus Core Audio work - COM lifetime, endpoint and se
 - Keep undocumented PolicyConfig calls isolated in `audio.rs`; the ten vtable
   slots before `SetDefaultEndpoint` must keep their order. Surface operation
   failures and refresh devices; never silently report a successful switch.
+- Spatial sound uses the documented WinRT `SpatialAudioDeviceConfiguration`, keyed by
+  the endpoint's device interface path and cached for the last output. The empty
+  GUID (`SPATIAL_OFF`) turns it off. Dolby and DTS report support even when their
+  apps are absent, so only Windows Sonic and the current format are offered.
+  Changes follow a click only and surface a refused status as an error.
 - Use `--check-audio` for read-only enumeration. Device-switch behavior needs
   the actual devices and must be reported as unverified when they are absent.

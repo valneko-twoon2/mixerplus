@@ -20,19 +20,27 @@ fn device_glyph(form: u32, input: bool) -> u16 {
 const CONTENT_TOP: i32 = 8;
 
 impl App {
-    /// Default output and input rows, one row per application, and expanded device lists.
-    fn snapshot(&self) -> Result<Snapshot> {
-        let mut endpoints = Vec::new();
-        let mut lists = Vec::new();
+    /// Default output and input rows, one row per application, the expanded device
+    /// lists, and the output's spatial sound when its list is expanded.
+    fn snapshot(&self) -> Result<MixerState> {
+        let mut state = MixerState {
+            endpoints: Vec::new(),
+            apps: self.audio.sessions()?,
+            lists: Vec::new(),
+            spatial: None,
+        };
         for (flow, input) in [(eRender, false), (eCapture, true)] {
             if let Ok(row) = self.audio.endpoint(flow) {
-                endpoints.push((input, row));
                 if self.settings.shows_devices(input) {
-                    lists.push((input, self.audio.devices(flow)?));
+                    state.lists.push((input, self.audio.devices(flow)?));
+                    if !input {
+                        state.spatial = self.audio.spatial(&row.key);
+                    }
                 }
+                state.endpoints.push((input, row));
             }
         }
-        Ok((endpoints, self.audio.sessions()?, lists))
+        Ok(state)
     }
 
     pub(super) fn refresh(&mut self, force: bool) -> Result<()> {
@@ -41,28 +49,38 @@ impl App {
         }
         match self.view {
             View::Mixer => {
-                let (endpoints, mut apps, lists) = self.snapshot()?;
-                let signature: Vec<_> = endpoints
+                let mut state = self.snapshot()?;
+                let signature: Vec<_> = state
+                    .endpoints
                     .iter()
                     .map(|(_, r)| r)
-                    .chain(&apps)
+                    .chain(&state.apps)
                     .map(|r| format!("{}:{}", r.key, r.name))
-                    .chain(lists.iter().flat_map(|(input, devices)| {
+                    .chain(state.lists.iter().flat_map(|(input, devices)| {
                         devices
                             .iter()
                             .map(move |d| format!("{input}:{}:{}", d.id, d.name))
                     }))
+                    .chain(state.spatial.iter().flat_map(|spatial| {
+                        spatial.formats.iter().map(|(f, _)| format!("spatial:{f}"))
+                    }))
                     .collect();
                 if !force && signature == self.signature {
                     // A new default only moves the selection in a device list.
-                    let devices = lists.into_iter().flat_map(|(_, devices)| devices);
+                    let devices = state.lists.into_iter().flat_map(|(_, devices)| devices);
                     for (device, (item, old)) in devices.zip(&mut self.devices) {
                         unsafe { crate::appearance::set_flag(*item, device.selected) };
                         old.selected = device.selected;
                     }
+                    if let Some(spatial) = &state.spatial {
+                        for (button, format) in &self.spatial {
+                            let selected = format.eq_ignore_ascii_case(&spatial.current);
+                            unsafe { crate::appearance::set_flag(*button, selected) };
+                        }
+                    }
                     // Refresh COM handles as sessions can be replaced without changing their key.
-                    let mut rows: Vec<_> = endpoints.into_iter().map(|(_, r)| r).collect();
-                    rows.append(&mut apps);
+                    let mut rows: Vec<_> = state.endpoints.into_iter().map(|(_, r)| r).collect();
+                    rows.append(&mut state.apps);
                     for i in 0..self.controls.len() {
                         // Device rows share keys with endpoint rows and keep their own handles.
                         if self.controls[i].kind != Kind::Device
@@ -76,7 +94,7 @@ impl App {
                     return Ok(());
                 }
                 self.signature = signature;
-                self.quietly(|app| app.rebuild_mixer(endpoints, apps, lists))
+                self.quietly(|app| app.rebuild_mixer(state))
             }
             View::Presets => {
                 let (id, name) = self
@@ -157,34 +175,41 @@ impl App {
         Ok(())
     }
 
-    fn rebuild_mixer(
-        &mut self,
-        endpoints: Vec<(bool, Row)>,
-        apps: Vec<Row>,
-        mut lists: Vec<(bool, Vec<Device>)>,
-    ) -> Result<()> {
+    fn rebuild_mixer(&mut self, state: MixerState) -> Result<()> {
+        let MixerState {
+            endpoints,
+            apps,
+            mut lists,
+            mut spatial,
+        } = state;
         // Destroying the focused row leaves no focus for keyboard navigation.
         self.clear_rows();
         let restore_focus = unsafe { GetFocus().is_invalid() };
         let (title, icon, body) = (self.fonts.title, self.fonts.icon, self.fonts.body);
         let has_endpoints = !endpoints.is_empty();
+        // An expanded list ends with a divider, so the next row is not read as part of it.
+        let mut after_list = false;
         for (input, row) in endpoints {
             let expanded = self.settings.shows_devices(input);
-            self.item(44, None, |app| {
+            if !input {
+                self.spatial_device = row.key.clone();
+            }
+            let (height, top) = if after_list { (53, 9) } else { (44, 0) };
+            self.item(height, after_list.then_some(4), |app| {
                 let i = app.controls.len();
                 let mute = app.button(
                     "",
                     ROW_ID + i * 3 + 1,
-                    [8, 4, 40, 36],
+                    [8, top + 4, 40, 36],
                     icon,
                     pack(GLYPH, 0, false),
                 )?;
-                let slider = app.slider(ROW_ID + i * 3, [52, 6, 216, 32])?;
-                let value = app.label("", [268, 4, 40, 36], body, SECONDARY)?;
+                let slider = app.slider(ROW_ID + i * 3, [52, top + 6, 216, 32])?;
+                let value = app.label("", [268, top + 4, 40, 36], body, SECONDARY)?;
                 let chevron = app.button(
                     "",
                     ROW_ID + i * 3 + 2,
-                    [308, 4, 40, 36],
+                    [308, top + 4, 40, 36],
                     icon,
                     pack(
                         GLYPH,
@@ -210,9 +235,19 @@ impl App {
                 );
                 Ok(())
             })?;
+            after_list = false;
             if let Some(index) = lists.iter().position(|(flow, _)| *flow == input) {
                 let (_, devices) = lists.remove(index);
+                self.heading(if input {
+                    "入力デバイス"
+                } else {
+                    "出力デバイス"
+                })?;
                 self.device_items(devices, input)?;
+                if !input && let Some(spatial) = spatial.take() {
+                    self.spatial_items(spatial)?;
+                }
+                after_list = true;
             }
         }
         let (header_height, offset) = if has_endpoints { (49, 9) } else { (40, 0) };
@@ -293,6 +328,40 @@ impl App {
         Ok(())
     }
 
+    /// A section title inside an expanded list.
+    fn heading(&mut self, text: &str) -> Result<()> {
+        let title = self.fonts.title;
+        self.item(40, None, |app| {
+            app.label(text, [16, 4, 328, 36], title, 0).map(|_| ())
+        })
+    }
+
+    /// The output's spatial sound formats, as in the quick settings output page.
+    fn spatial_items(&mut self, spatial: Spatial) -> Result<()> {
+        let body = self.fonts.body;
+        self.heading("立体音響")?;
+        for (format, name) in spatial.formats {
+            let selected = format.eq_ignore_ascii_case(&spatial.current);
+            let caption = match name {
+                _ if format == SPATIAL_OFF => "オフ",
+                "?" => "その他の形式",
+                name => name,
+            };
+            self.item(40, None, |app| {
+                let button = app.button(
+                    caption,
+                    SPATIAL_ID + app.spatial.len(),
+                    [8, 2, 340, 36],
+                    body,
+                    pack(ITEM, 0, selected),
+                )?;
+                app.spatial.push((button, format));
+                Ok(())
+            })?;
+        }
+        Ok(())
+    }
+
     /// The default-device list under an endpoint row, with each device's own volume.
     fn device_items(&mut self, devices: Vec<Device>, input: bool) -> Result<()> {
         let body = self.fonts.body;
@@ -308,7 +377,7 @@ impl App {
                 let item = app.button(
                     &device.name,
                     DEVICE_ID + app.devices.len(),
-                    [8, 0, 344, 36],
+                    [8, 0, 340, 36],
                     body,
                     pack(ITEM, device_glyph(device.form, input), device.selected),
                 )?;
@@ -395,16 +464,143 @@ impl App {
                 y += item.height;
             }
         }
-        let scrollbar = (max_scroll > 0).then(|| {
-            let total: i32 = self.items.iter().map(|item| item.height).sum();
-            let before: i32 = self.items[..self.scroll]
-                .iter()
-                .map(|item| item.height)
-                .sum();
-            let top = CONTENT_TOP + area * before / total;
-            (top, top + (area * shown / total).max(16))
+        self.track = (max_scroll > 0).then(|| {
+            let total = self.offset_of(self.items.len());
+            let thumb_top = CONTENT_TOP + area * self.offset_of(self.scroll) / total;
+            Track {
+                top: CONTENT_TOP,
+                bottom: CONTENT_TOP + area,
+                thumb_top,
+                thumb_bottom: thumb_top + (area * shown / total).max(16),
+            }
         });
-        self.finish_layout(CONTENT_TOP + area + 8, dividers, scrollbar)
+        self.finish_layout(CONTENT_TOP + area + 8, dividers)?;
+        self.show_scrollbar();
+        Ok(())
+    }
+
+    /// Logical height of the items before `index`.
+    fn offset_of(&self, index: usize) -> i32 {
+        self.items[..index].iter().map(|item| item.height).sum()
+    }
+
+    /// Draws the scroll bar: a thin line, wider under the pointer or while dragged.
+    fn show_scrollbar(&self) {
+        let wide = self.track_hot || self.drag.is_some();
+        let (left, right) = if wide { (8, 2) } else { (6, 3) };
+        let width = crate::config::POPUP_WIDTH;
+        crate::appearance::set_scrollbar(self.track.map(|track| RECT {
+            left: self.px(width - left),
+            top: self.px(track.thumb_top),
+            right: self.px(width - right),
+            bottom: self.px(track.thumb_bottom),
+        }));
+        unsafe {
+            let strip = RECT {
+                left: self.px(width - 10),
+                top: 0,
+                right: self.px(width),
+                bottom: self.px(self.track.map_or(0, |track| track.bottom + 8)),
+            };
+            let _ = InvalidateRect(Some(self.hwnd), Some(&strip), false);
+        }
+    }
+
+    /// Whether the logical point lies on the scroll bar's track.
+    fn on_track(&self, x: i32, y: i32) -> bool {
+        self.track.is_some_and(|track| {
+            x >= crate::config::POPUP_WIDTH - 10 && (track.top..track.bottom).contains(&y)
+        })
+    }
+
+    /// Converts popup client coordinates in `lparam` to logical pixels.
+    fn logical_point(&self, lparam: LPARAM) -> (i32, i32) {
+        let x = (lparam.0 & 0xffff) as i16 as f32;
+        let y = ((lparam.0 >> 16) & 0xffff) as i16 as f32;
+        ((x / self.scale) as i32, (y / self.scale) as i32)
+    }
+
+    /// Grabs the thumb, or pages toward the pointer when the track is pressed.
+    pub(super) fn track_press(&mut self, lparam: LPARAM) -> Result<()> {
+        let (x, y) = self.logical_point(lparam);
+        let Some(track) = self.track.filter(|_| self.on_track(x, y)) else {
+            return Ok(());
+        };
+        if (track.thumb_top..track.thumb_bottom).contains(&y) {
+            self.drag = Some(Drag {
+                pointer: y,
+                thumb: track.thumb_top,
+            });
+            unsafe {
+                SetCapture(self.hwnd);
+            }
+            self.show_scrollbar();
+            return Ok(());
+        }
+        let page = self.shown_items().max(1) as isize;
+        self.scroll_by(if y < track.thumb_top { -page } else { page })
+            .map(|_| ())
+    }
+
+    /// Follows a thumb drag, or widens the bar under the pointer.
+    pub(super) fn track_move(&mut self, lparam: LPARAM) -> Result<()> {
+        let (x, y) = self.logical_point(lparam);
+        if let (Some(drag), Some(track)) = (self.drag, self.track) {
+            let thumb = drag.thumb + y - drag.pointer;
+            let area = (track.bottom - track.top).max(1);
+            let target = (thumb - track.top) * self.offset_of(self.items.len()) / area;
+            // The item whose top is nearest to where the thumb now points.
+            let scroll = (0..=self.max_scroll())
+                .min_by_key(|&index| (self.offset_of(index) - target).abs())
+                .unwrap_or(0);
+            self.scroll_by(scroll as isize - self.scroll as isize)?;
+            return Ok(());
+        }
+        let hot = self.on_track(x, y);
+        if hot != self.track_hot {
+            self.track_hot = hot;
+            if hot {
+                let mut leave = TRACKMOUSEEVENT {
+                    cbSize: size_of::<TRACKMOUSEEVENT>() as u32,
+                    dwFlags: TME_LEAVE,
+                    hwndTrack: self.hwnd,
+                    dwHoverTime: 0,
+                };
+                unsafe {
+                    let _ = TrackMouseEvent(&mut leave);
+                }
+            }
+            self.show_scrollbar();
+        }
+        Ok(())
+    }
+
+    /// Ends a thumb drag or the pointer's hover over the bar.
+    pub(super) fn track_release(&mut self, hot: bool) {
+        let dragging = self.drag.take().is_some();
+        if dragging {
+            unsafe {
+                // Capture changes come back here, so the drag has already ended.
+                let _ = ReleaseCapture();
+            }
+        }
+        if dragging || self.track_hot != hot {
+            self.track_hot = hot;
+            self.show_scrollbar();
+        }
+    }
+
+    /// How many items are shown at the current scroll position.
+    fn shown_items(&self) -> usize {
+        let shown = self.shown_height(self.scroll);
+        let mut height = 0;
+        self.items[self.scroll..]
+            .iter()
+            .take_while(|item| {
+                height += item.height;
+                height <= shown
+            })
+            .count()
     }
 
     /// Scrolls the mixer by `steps` items and reports whether it moved.
@@ -491,21 +687,9 @@ impl App {
         }
     }
 
-    /// Places the footer at `footer` and anchors the popup above the taskbar. A
-    /// scroll indicator spans `scrollbar`, a logical top and bottom.
-    pub(super) fn finish_layout(
-        &mut self,
-        footer: i32,
-        dividers: Vec<i32>,
-        scrollbar: Option<(i32, i32)>,
-    ) -> Result<()> {
-        let scrollbar = scrollbar.map(|(top, bottom)| RECT {
-            left: self.px(crate::config::POPUP_WIDTH - 6),
-            top: self.px(top),
-            right: self.px(crate::config::POPUP_WIDTH - 3),
-            bottom: self.px(bottom),
-        });
-        crate::appearance::set_layout(self.px(footer), dividers, scrollbar);
+    /// Places the footer at `footer` and anchors the popup above the taskbar.
+    pub(super) fn finish_layout(&mut self, footer: i32, dividers: Vec<i32>) -> Result<()> {
+        crate::appearance::set_layout(self.px(footer), dividers);
         unsafe {
             if let Some(link) = self.children.get(self.chrome_count.saturating_sub(1)) {
                 SetWindowPos(

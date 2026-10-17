@@ -262,6 +262,7 @@ impl App {
         self.clicked = HWND::default();
         self.controls.clear();
         self.devices.clear();
+        self.spatial.clear();
         self.items.clear();
     }
 
