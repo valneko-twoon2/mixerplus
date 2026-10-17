@@ -12,7 +12,8 @@ sidebar, themes, WebView, or a .NET runtime dependency.
 - `src/ui.rs`: shared types and state of the native Win32 tray popup. Its behavior is in
   `src/ui/`: `run` (startup, diagnostics, message loop), `window` (window procedure,
   commands), `tray`, `popup` (open, slide, dismiss), `transition` (view cross-fade),
-  `controls`, `views` (scrolling mixer with inline device lists), and `presets`.
+  `controls`, `views` (mixer with inline device lists), `scroll` (row viewport,
+  pixel scrolling, scroll bar), and `presets`.
 - `src/settings.rs`: popup preferences in `%APPDATA%\mixerplus\settings.json`.
 - `src/appearance.rs`: native popup palette, layout state, and background. Its submodules in
   `src/appearance/` are `controls` (buttons, sliders, labels), `transition` (captured bitmaps,

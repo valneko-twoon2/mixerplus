@@ -68,7 +68,10 @@ pub(super) unsafe extern "system" fn window_proc(
                     }
                 }
                 REFRESH_PAGE => app.refresh(true),
-                TAB_KEY => app.reveal_tab_target(wparam.0 != 0),
+                TAB_KEY => {
+                    app.reveal_focus();
+                    Ok(())
+                }
                 REFRESH_STATE => app.refresh(false),
                 COMMIT_EDIT => app.commit_edit(),
                 DISMISS => {
@@ -123,6 +126,10 @@ pub(super) unsafe extern "system" fn window_proc(
                 }
                 WM_TIMER if wparam.0 == ANIMATION_TIMER => {
                     app.animate();
+                    Ok(())
+                }
+                WM_TIMER if wparam.0 == SCROLL_TIMER => {
+                    app.scroll_step();
                     Ok(())
                 }
                 WM_TIMER if wparam.0 == TRANSITION_TIMER => {
@@ -284,8 +291,12 @@ impl App {
         self.post_refresh()
     }
 
-    /// Scrolls the mixer rows or the preset list, one row per wheel notch.
+    /// Scrolls the mixer rows, or the preset list one row per wheel notch.
     fn wheel(&mut self, delta: i16) -> Result<()> {
+        if self.view == View::Mixer {
+            self.wheel_scroll(delta);
+            return Ok(());
+        }
         self.wheel_rest += delta as i32;
         // Positive deltas scroll toward the top.
         let steps = -(self.wheel_rest / WHEEL_DELTA as i32) as isize;
@@ -293,17 +304,10 @@ impl App {
         if steps == 0 {
             return Ok(());
         }
-        match self.view {
-            View::Presets => {
-                let offset = self.list_offset.saturating_add_signed(steps);
-                if offset != self.list_offset {
-                    self.list_offset = offset;
-                    return self.refresh(true);
-                }
-            }
-            View::Mixer => {
-                self.scroll_by(steps)?;
-            }
+        let offset = self.list_offset.saturating_add_signed(steps);
+        if offset != self.list_offset {
+            self.list_offset = offset;
+            return self.refresh(true);
         }
         Ok(())
     }

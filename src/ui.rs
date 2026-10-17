@@ -30,6 +30,7 @@ mod controls;
 mod popup;
 mod presets;
 mod run;
+mod scroll;
 mod transition;
 mod tray;
 mod views;
@@ -60,7 +61,7 @@ const NEW_PRESET: usize = 18;
 const PRESET_ID: usize = 3000;
 const COMMIT_EDIT: u32 = WM_APP + 5;
 const SHOW_ABOUT: u32 = WM_APP + 6;
-/// Sent before the dialog manager handles Tab, with the Shift state in `WPARAM`.
+/// Sent after the dialog manager has moved focus with the keyboard.
 const TAB_KEY: u32 = WM_APP + 7;
 const EM_SETSEL: u32 = 0xb1;
 const EM_SETLIMITTEXT: u32 = 0xc5;
@@ -70,6 +71,9 @@ const TRAY_TIMER: usize = 2;
 const ANIMATION_TIMER: usize = 3;
 const METER_TIMER: usize = 4;
 const TRANSITION_TIMER: usize = 5;
+const SCROLL_TIMER: usize = 6;
+/// Logical width of the strip at the popup's right edge that holds the scroll bar.
+const SCROLLBAR_WIDTH: i32 = 8;
 const METER_INTERVAL_MS: u32 = 33;
 const TRANSITION_MS: f32 = 220.0;
 const TRAY_RETRY_MS: u32 = 2_000;
@@ -178,8 +182,10 @@ impl Drop for Control {
 
 /// One scroll step of the mixer: a row, or the section header.
 struct Item {
+    /// Logical top in the scrolling content.
+    top: i32,
     height: i32,
-    /// Windows with their physical position: x in the popup, y from the item's top.
+    /// Windows with their physical position: x in the viewport, y from the item's top.
     windows: Vec<(HWND, POINT)>,
     /// A section divider this many logical pixels below the item's top.
     divider: Option<i32>,
@@ -311,14 +317,21 @@ struct App {
     clicked: HWND,
     fonts: Fonts,
     icon: HICON,
-    /// Mixer rows and headers in order; `scroll` is the first one shown.
+    /// The child window that holds and clips the rows; chrome stays outside it.
+    viewport: HWND,
+    /// Mixer rows and headers in order.
     items: Vec<Item>,
-    scroll: usize,
-    /// Wheel movement below one notch, kept until it adds up to a step.
+    /// How far the mixer rows are scrolled, and where a wheel glide is heading, in
+    /// physical pixels.
+    scroll: i32,
+    scroll_target: i32,
+    /// Physical heights of all mixer content and of its visible part.
+    content_height: i32,
+    viewport_height: i32,
+    /// Wheel movement below one notch on the preset page, kept until it adds up.
     wheel_rest: i32,
     /// Tallest the scrolling content may be, in logical pixels.
     content_limit: i32,
-    track: Option<Track>,
     drag: Option<Drag>,
     /// Whether the pointer is over the scroll bar, which widens it.
     track_hot: bool,
@@ -402,6 +415,7 @@ impl Drop for App {
             let _ = KillTimer(Some(self.hwnd), ANIMATION_TIMER);
             let _ = KillTimer(Some(self.hwnd), METER_TIMER);
             let _ = KillTimer(Some(self.hwnd), TRANSITION_TIMER);
+            let _ = KillTimer(Some(self.hwnd), SCROLL_TIMER);
             let _ = Shell_NotifyIconW(NIM_DELETE, &self.tray_data());
             let _ = DestroyWindow(self.hwnd);
             let _ = DestroyIcon(self.icon);

@@ -132,6 +132,7 @@ thread_local! {
     static PALETTE: Cell<Palette> = const { Cell::new(LIGHT) };
     static LAYOUT: RefCell<Layout> = RefCell::default();
     static EDIT_BRUSH: Cell<HBRUSH> = const { Cell::new(HBRUSH(std::ptr::null_mut())) };
+    static VIEWPORT: Cell<HWND> = const { Cell::new(HWND(std::ptr::null_mut())) };
 }
 
 /// Reads the system light/dark mode and accent color, as the shell flyouts do.
@@ -185,6 +186,17 @@ pub fn set_layout(footer: i32, dividers: Vec<i32>) {
         layout.dividers = dividers;
         layout.scrollbar = None;
     });
+}
+
+/// Names the popup's row container, which paints the surface, dividers, and text box
+/// frame like the popup itself. It sits at the popup's client origin.
+pub fn set_viewport(hwnd: HWND) {
+    VIEWPORT.set(hwnd);
+}
+
+/// Moves the section dividers, in popup client pixels, after scrolling.
+pub fn set_dividers(dividers: Vec<i32>) {
+    LAYOUT.with(|layout| layout.borrow_mut().dividers = dividers);
 }
 
 /// Draws the scroll bar thumb at `rect` in popup client pixels, or removes it.
@@ -269,7 +281,7 @@ unsafe fn background_sized(hwnd: HWND, dc: HDC, size: Option<(i32, i32)>) {
         let parent = GetParent(hwnd).unwrap_or(hwnd);
         LAYOUT.with(|layout| {
             let layout = layout.borrow();
-            if parent == hwnd {
+            if parent == hwnd || hwnd == VIEWPORT.get() {
                 fill(dc, local, palette.background);
                 if layout.footer > 0 {
                     fill(
@@ -423,6 +435,20 @@ pub unsafe fn paint(hwnd: HWND) {
         if !compose(frame.dc, rect) {
             background(hwnd, frame.dc);
         }
+        drop(frame);
+        let _ = EndPaint(hwnd, &paint);
+    }
+}
+
+/// Paints a window that shows only the popup surface, such as the row viewport.
+pub unsafe fn paint_surface(hwnd: HWND) {
+    unsafe {
+        let mut paint = PAINTSTRUCT::default();
+        let target = BeginPaint(hwnd, &mut paint);
+        let mut rect = RECT::default();
+        let _ = GetClientRect(hwnd, &mut rect);
+        let frame = Frame::new(target, rect);
+        background(hwnd, frame.dc);
         drop(frame);
         let _ = EndPaint(hwnd, &paint);
     }

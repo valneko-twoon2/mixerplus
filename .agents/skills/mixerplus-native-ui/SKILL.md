@@ -28,20 +28,24 @@ description: Rules for mixerplus's Win32 tray icon and popup - child controls, c
   in `appearance.rs`. The volume value beside each slider is a deliberate mixerplus
   addition.
 - Views: `View::Presets` (see `mixerplus-presets`) and `View::Mixer`: endpoint rows,
-  each with a chevron that expands its default-device list (a heading, then a volume
-  slider per device) inline, then the section header and application rows. The
-  expanded output list ends with the output's spatial sound formats (立体音響). A row
-  after an expanded list starts with a divider so output and input stay apart. The expanded
+  each with a chevron that expands its default-device list (a volume slider per
+  device) inline, then the section header and application rows. An expanded group is
+  titled above its default row (出力デバイス, 入力デバイス). The expanded output list
+  ends with the output's spatial sound formats (立体音響). The group after an expanded
+  list starts with a divider so output and input stay apart. The expanded
   state is remembered in `settings.json` (`settings.rs`). View changes and chevron
   toggles are posted as `REFRESH_PAGE` so the clicked button's notification unwinds first.
-- Mixer rows are `Item`s that scroll one item per wheel notch. Scrolling only moves,
-  shows, and hides existing windows (`place_items`); it never rebuilds. Child windows
-  cannot be clipped, so only whole items are shown, and the content keeps the height of
-  the tallest scroll position so the popup does not resize while scrolling. Tab scrolls
-  the next item into view (`TAB_KEY`) because hidden windows are not tab stops.
-- The scroll bar is painted by the popup in the free strip at its right edge (row
-  controls end 12 px before it). The popup handles its mouse messages: drag the thumb
-  (with capture), press the track to page, and hover to widen it.
+- Row controls are children of the viewport (`ui/scroll.rs`), a control-parent child
+  window at the popup's client origin that clips them and forwards their notifications
+  to the popup; the footer link stays a direct child. The mixer scrolls by pixels with
+  `ScrollWindowEx` and never rebuilds to scroll; the wheel glides with an ease-out
+  timer. Sliders pass the wheel to the popup, so it scrolls instead of changing volume,
+  as in the shell flyout. After Tab, `TAB_KEY` scrolls the focused row into view.
+  Captures clip viewport children to it, and the viewport paints the dividers and the
+  text box frame like the popup.
+- The scroll bar is painted by the popup in the strip right of the viewport. The popup
+  handles its mouse messages: drag the thumb (with capture), press the track to page,
+  and hover to widen it.
 - Owner-drawn buttons pack their kind, Fluent glyph, and selection/mute flag in
   `GWLP_USERDATA` (`appearance::pack`). Use `set_glyph`/`set_flag` for updates.
 - Sliders show a live peak meter (`IAudioMeterInformation`, polled every 33 ms

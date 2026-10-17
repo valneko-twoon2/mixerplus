@@ -98,6 +98,16 @@ unsafe fn run_initialized() -> Result<()> {
         if RegisterClassW(&class) == 0 {
             return Err(windows::core::Error::from_thread());
         }
+        let viewport = WNDCLASSW {
+            lpfnWndProc: Some(scroll::viewport_proc),
+            hInstance: instance.into(),
+            lpszClassName: w!("mixerplusViewport"),
+            hCursor: LoadCursorW(None, IDC_ARROW)?,
+            ..Default::default()
+        };
+        if RegisterClassW(&viewport) == 0 {
+            return Err(windows::core::Error::from_thread());
+        }
         let inspect = std::env::args().any(|arg| arg == "--inspect-ui");
         let hwnd = CreateWindowExW(
             if inspect {
@@ -148,11 +158,14 @@ unsafe fn run_initialized() -> Result<()> {
             tooltip,
             fonts: Fonts::new(scale),
             icon,
+            viewport: HWND::default(),
             items: Vec::new(),
             scroll: 0,
+            scroll_target: 0,
+            content_height: 0,
+            viewport_height: 0,
             wheel_rest: 0,
             content_limit: crate::config::MAX_CONTENT_HEIGHT,
-            track: None,
             drag: None,
             track_hot: false,
             controls: Vec::new(),
@@ -247,11 +260,6 @@ unsafe fn run_initialized() -> Result<()> {
                 let _ = PostMessageW(Some(hwnd), DISMISS, WPARAM(0), LPARAM(0));
                 continue;
             }
-            if message.message == WM_KEYDOWN && message.wParam.0 == VK_TAB_CODE {
-                // Let the mixer scroll rows into view before focus moves.
-                let shift = GetKeyState(VK_SHIFT.0 as i32) < 0;
-                SendMessageW(hwnd, TAB_KEY, Some(WPARAM(shift as usize)), None);
-            }
             if message.message == WM_KEYDOWN && message.wParam.0 == VK_RETURN_CODE {
                 let focus = GetFocus();
                 if !focus.is_invalid() && GetDlgCtrlID(focus) as usize == EDIT_ID {
@@ -262,6 +270,10 @@ unsafe fn run_initialized() -> Result<()> {
             if !IsDialogMessageW(hwnd, &message).as_bool() {
                 let _ = TranslateMessage(&message);
                 DispatchMessageW(&message);
+            }
+            if message.message == WM_KEYDOWN && message.wParam.0 == VK_TAB_CODE {
+                // Scroll the newly focused row into view.
+                SendMessageW(hwnd, TAB_KEY, None, None);
             }
         }
         Ok(())
@@ -289,9 +301,9 @@ fn check_scrolling(hwnd: HWND) -> Result<()> {
         app.open()?;
         before = sliders(app);
         // Scroll to the end and back; rows are moved, never rebuilt.
-        while app.scroll_by(1)? {}
+        app.scroll_to(i32::MAX);
         let bottom = app.scroll;
-        while app.scroll_by(-1)? {}
+        app.scroll_to(0);
         if app.scroll != 0 || sliders(app) != before {
             return Err(fail("Scrolling changed the mixer rows"));
         }
@@ -316,7 +328,7 @@ fn check_scrolling(hwnd: HWND) -> Result<()> {
                 .iter()
                 .position(|c| c.kind == Kind::Endpoint { input: false })
                 .ok_or_else(|| fail("The output row is missing"))?;
-            chevron = unsafe { GetDlgItem(Some(app.hwnd), (ROW_ID + index * 3 + 2) as i32)? };
+            chevron = unsafe { GetDlgItem(Some(app.viewport), (ROW_ID + index * 3 + 2) as i32)? };
             Ok(())
         })?;
         unsafe {

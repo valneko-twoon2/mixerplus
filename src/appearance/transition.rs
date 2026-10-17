@@ -15,6 +15,26 @@ unsafe fn paint_children(hwnd: HWND, dc: HDC, children: &[HWND]) {
                 continue;
             }
             let saved = SaveDC(dc);
+            // Rows inside the viewport are clipped to it, as on screen.
+            if let Ok(parent) = GetParent(*child)
+                && parent != hwnd
+            {
+                let mut clip = RECT::default();
+                let _ = GetWindowRect(parent, &mut clip);
+                let mut corners = [
+                    POINT {
+                        x: clip.left,
+                        y: clip.top,
+                    },
+                    POINT {
+                        x: clip.right,
+                        y: clip.bottom,
+                    },
+                ];
+                MapWindowPoints(None, Some(hwnd), &mut corners);
+                let _ =
+                    IntersectClipRect(dc, corners[0].x, corners[0].y, corners[1].x, corners[1].y);
+            }
             let mut screen = RECT::default();
             let _ = GetWindowRect(*child, &mut screen);
             let mut origin = POINT {

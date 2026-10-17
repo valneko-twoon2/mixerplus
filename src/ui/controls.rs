@@ -59,6 +59,12 @@ impl App {
             return Ok(hwnd);
         }
         let text = wide(text);
+        // Chrome is built before the viewport has rows; everything after goes inside it.
+        let parent = if self.chrome_count == 0 {
+            self.hwnd
+        } else {
+            self.viewport
+        };
         unsafe {
             let hwnd = CreateWindowExW(
                 WINDOW_EX_STYLE(0),
@@ -69,7 +75,7 @@ impl App {
                 self.px(rect[1]),
                 self.px(rect[2]),
                 self.px(rect[3]),
-                Some(self.hwnd),
+                Some(parent),
                 Some(HMENU(id as *mut _)),
                 None,
                 None,
@@ -216,6 +222,29 @@ impl App {
     }
 
     pub(super) fn build_chrome(&mut self) -> Result<()> {
+        // A control parent, so dialog keyboard navigation reaches the rows inside.
+        self.viewport = unsafe {
+            CreateWindowExW(
+                WS_EX_CONTROLPARENT,
+                w!("mixerplusViewport"),
+                None,
+                WS_CHILD | WS_CLIPCHILDREN,
+                0,
+                0,
+                0,
+                0,
+                Some(self.hwnd),
+                None,
+                None,
+                None,
+            )?
+        };
+        unsafe {
+            let _ = ShowWindow(self.viewport, SW_SHOWNA);
+        }
+        crate::appearance::set_viewport(self.viewport);
+        // Painted before the rows in captures, as on screen.
+        self.children.push(self.viewport);
         self.button(
             "その他の音量設定",
             SETTINGS_LINK,

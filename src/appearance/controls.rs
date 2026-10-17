@@ -326,6 +326,13 @@ unsafe extern "system" fn slider_proc(
         track_hover(hwnd, message);
         match message {
             WM_ERASEBKGND => return LRESULT(1),
+            // As in the shell flyout, the wheel scrolls the popup instead of changing volume.
+            WM_MOUSEWHEEL => {
+                if let Ok(parent) = GetParent(hwnd) {
+                    return SendMessageW(parent, message, Some(wparam), Some(lparam));
+                }
+                return LRESULT(0);
+            }
             WM_PAINT | WM_PRINTCLIENT => {
                 let mut paint = PAINTSTRUCT::default();
                 let target = if message == WM_PAINT {
