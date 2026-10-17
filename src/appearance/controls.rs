@@ -24,7 +24,9 @@ pub unsafe fn draw_item(item: &DRAWITEMSTRUCT) {
         let flag = (data >> 24) & 1 != 0;
         let disabled = item.itemState.0 & ODS_DISABLED.0 != 0;
         let pressed = item.itemState.0 & ODS_SELECTED.0 != 0;
-        let fill = if kind == ITEM && flag {
+        let fill = if kind == KEYS {
+            None
+        } else if kind == ITEM && flag {
             Some(palette.selected)
         } else if disabled {
             None
@@ -111,6 +113,67 @@ pub unsafe fn draw_item(item: &DRAWITEMSTRUCT) {
                     false,
                     color,
                 );
+            }
+            KEYS => {
+                let height = px(20.0);
+                let top = cy - height / 2;
+                let inset = (s.round() as i32).max(1);
+                let mut left = rect.left;
+                let old = SelectObject(dc, font.into());
+                for key in String::from_utf16_lossy(caption).split('+') {
+                    let text: Vec<u16> = key.encode_utf16().collect();
+                    let width = if key == "Win" {
+                        px(24.0)
+                    } else {
+                        let mut size = SIZE::default();
+                        let _ = GetTextExtentPoint32W(dc, &text, &mut size);
+                        (size.cx + px(12.0)).max(px(22.0))
+                    };
+                    let cap = RECT {
+                        left,
+                        top,
+                        right: left + width,
+                        bottom: top + height,
+                    };
+                    solid_round(dc, cap, px(6.0), palette.border);
+                    solid_round(
+                        dc,
+                        RECT {
+                            left: cap.left + inset,
+                            top: cap.top + inset,
+                            right: cap.right - inset,
+                            bottom: cap.bottom - inset,
+                        },
+                        px(6.0) - inset,
+                        palette.hover,
+                    );
+                    if key == "Win" {
+                        // The Windows logo: four squares.
+                        let (square, gap) = (px(4.0), px(1.0));
+                        let total = square * 2 + gap;
+                        let (x, y) = (
+                            (cap.left + cap.right - total) / 2,
+                            (cap.top + cap.bottom - total) / 2,
+                        );
+                        for (column, row) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                            let (x, y) = (x + column * (square + gap), y + row * (square + gap));
+                            super::fill(
+                                dc,
+                                RECT {
+                                    left: x,
+                                    top: y,
+                                    right: x + square,
+                                    bottom: y + square,
+                                },
+                                palette.secondary,
+                            );
+                        }
+                    } else {
+                        crate::drawing::text(dc, &text, cap, true, palette.secondary);
+                    }
+                    left += width + px(3.0);
+                }
+                SelectObject(dc, old);
             }
             APP => {
                 let icon = HICON(GetPropW(hwnd, w!("mixerplusIcon")).0);

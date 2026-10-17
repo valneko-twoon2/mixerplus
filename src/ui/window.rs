@@ -45,6 +45,18 @@ pub(super) unsafe extern "system" fn window_proc(
             let app = state.as_mut()?;
             let result = match message {
                 TRAY if lparam.0 as u32 == WM_RBUTTONUP => app.tray_menu(),
+                WM_HOTKEY if wparam.0 == HOTKEY as usize => {
+                    // The shortcut toggles the popup like the tray icon does.
+                    let showing = IsWindowVisible(app.hwnd).as_bool()
+                        && !app.animation.as_ref().is_some_and(|a| a.closing);
+                    if showing {
+                        app.dismiss();
+                        Ok(())
+                    } else {
+                        app.dismissed = None;
+                        app.open()
+                    }
+                }
                 TRAY if lparam.0 as u32 == WM_LBUTTONUP => {
                     // A click on the icon first deactivates an open popup; treat it as a toggle.
                     if app

@@ -311,7 +311,12 @@ impl App {
             } else {
                 "出力デバイス"
             };
-            app.label(text, [16, top + 2, 240, 36], title, 0)?;
+            // The label stays narrow so it does not paint over the key caps.
+            let label = if input || !app.hotkey { 240 } else { 92 };
+            app.label(text, [16, top + 2, label, 36], title, 0)?;
+            if !input && app.hotkey {
+                app.keycaps("Win+Alt+V", [112, top + 2, 140, 36])?;
+            }
             if let Some(volume) = volume {
                 let button = app.button(
                     "",

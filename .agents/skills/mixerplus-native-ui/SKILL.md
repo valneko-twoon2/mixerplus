@@ -38,6 +38,11 @@ description: Rules for mixerplus's Win32 tray icon and popup - child controls, c
   divider. The expanded state is remembered in `settings.json` (`settings.rs`). View
   changes and chevron toggles are posted as `REFRESH_PAGE` so the clicked button's
   notification unwinds first.
+- Win+Alt+V (`RegisterHotKey`, `HOTKEY`) toggles the popup like a tray click; it only
+  opens or closes, and never changes the saved expanded state. The output heading
+  shows it as key caps (`KEYS` button kind, caption `Win+Alt+V`, drawn by
+  `draw_item`, no Tab stop) only when registration succeeded, since another
+  application may own the shortcut; a failure is not reported.
 - Row controls are children of the viewport (`ui/scroll.rs`), a control-parent child
   window at the popup's client origin that clips them and forwards their notifications
   to the popup; the footer link stays a direct child. The mixer scrolls by pixels with

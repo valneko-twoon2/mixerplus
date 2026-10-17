@@ -45,6 +45,8 @@ pub const GLYPH: isize = 1;
 pub const LINK: isize = 2;
 pub const ITEM: isize = 3;
 pub const APP: isize = 4;
+/// Key caps: a non-interactive hint such as `Win+Alt+V`, drawn from the caption.
+pub const KEYS: isize = 5;
 /// Static text drawn in the secondary color.
 pub const SECONDARY: isize = 1;
 

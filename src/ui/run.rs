@@ -150,6 +150,14 @@ unsafe fn run_initialized() -> Result<()> {
             None,
         )?;
         let scale = GetDpiForWindow(hwnd).max(96) as f32 / 96.0;
+        // Another application may already own the shortcut; the heading then shows no hint.
+        let hotkey = RegisterHotKey(
+            Some(hwnd),
+            HOTKEY,
+            MOD_WIN | MOD_ALT | MOD_NOREPEAT,
+            VK_V_CODE as u32,
+        )
+        .is_ok();
         let icon = tray_icon()?;
         let settings_path = Settings::default_path();
         let app = App {
@@ -171,6 +179,7 @@ unsafe fn run_initialized() -> Result<()> {
             track_hot: false,
             controls: Vec::new(),
             group_mutes: Vec::new(),
+            hotkey,
             devices: Vec::new(),
             spatial: Vec::new(),
             spatial_device: String::new(),
@@ -287,6 +296,8 @@ const VK_ESCAPE_CODE: usize = 0x1b;
 const VK_RETURN_CODE: usize = 0x0d;
 
 const VK_TAB_CODE: usize = 0x09;
+
+const VK_V_CODE: usize = 0x56;
 
 fn check_scrolling(hwnd: HWND) -> Result<()> {
     let fail =

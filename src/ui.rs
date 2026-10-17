@@ -20,7 +20,7 @@ use windows::{
 };
 
 use crate::{
-    appearance::{GLYPH, ITEM, LINK, SECONDARY, pack},
+    appearance::{GLYPH, ITEM, KEYS, LINK, SECONDARY, pack},
     audio::{Audio, Device, Row, SPATIAL_OFF, Spatial, Volume},
     presets::{PresetStore, sanitize_name},
     settings::Settings,
@@ -57,6 +57,7 @@ const SPATIAL_ID: usize = 2000;
 const EDIT_ID: usize = 19;
 const OUTPUT_CHEVRON: usize = 20;
 const INPUT_CHEVRON: usize = 21;
+const HOTKEY: i32 = 1;
 const OUTPUT_MUTE: usize = 22;
 const INPUT_MUTE: usize = 23;
 const PRESETS_BUTTON: usize = 17;
@@ -323,6 +324,8 @@ struct App {
     // Declared after the controls that use them so windows are destroyed first.
     controls: Vec<Control>,
     group_mutes: Vec<GroupMute>,
+    /// Whether Win+Alt+V is registered, which the output heading then advertises.
+    hotkey: bool,
     devices: Vec<(HWND, Device)>,
     /// Spatial sound buttons with their format subtypes.
     spatial: Vec<(HWND, String)>,
@@ -432,6 +435,7 @@ impl Drop for App {
             let _ = KillTimer(Some(self.hwnd), REFRESH_TIMER);
             let _ = KillTimer(Some(self.hwnd), TRAY_TIMER);
             let _ = KillTimer(Some(self.hwnd), ANIMATION_TIMER);
+            let _ = UnregisterHotKey(Some(self.hwnd), HOTKEY);
             let _ = KillTimer(Some(self.hwnd), METER_TIMER);
             let _ = KillTimer(Some(self.hwnd), TRANSITION_TIMER);
             scroll::stop_pacing();

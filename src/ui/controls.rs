@@ -42,6 +42,10 @@ impl App {
                     Some(LPARAM(0)),
                 );
                 set_text(hwnd, text);
+                // Pooled windows differ in whether Tab reaches them.
+                let current = GetWindowLongW(hwnd, GWL_STYLE) as u32;
+                let tabs = current & !WS_TABSTOP.0 | style.0 & WS_TABSTOP.0;
+                SetWindowLongW(hwnd, GWL_STYLE, tabs as i32);
                 // The bottom of the z-order is where a new window goes, so tab order
                 // stays the creation order.
                 SetWindowPos(
@@ -131,6 +135,20 @@ impl App {
             font,
         )?;
         unsafe { crate::appearance::install_button(hwnd, data)? };
+        Ok(hwnd)
+    }
+
+    /// A key cap hint such as `Win+Alt+V`, which neither clicks nor takes focus.
+    pub(super) fn keycaps(&mut self, keys: &str, rect: [i32; 4]) -> Result<HWND> {
+        let hwnd = self.child(
+            Class::Button,
+            keys,
+            0,
+            rect,
+            WINDOW_STYLE(BS_OWNERDRAW as u32),
+            self.fonts.small,
+        )?;
+        unsafe { crate::appearance::install_button(hwnd, pack(KEYS, 0, false))? };
         Ok(hwnd)
     }
 
