@@ -110,6 +110,10 @@ git commit -m "feat: describe the completed change"
 pwsh -File scripts/complete-task.ps1
 ```
 
+`pwsh -File scripts/run-latest.ps1` stops any running mixerplus, including the
+installed copy, and starts the latest release build from `src/target/release/`.
+Agents use it after diagnostics instead of restarting the installed copy.
+
 `THIRD-PARTY-NOTICES.txt` lists the crates in the release executable and is shown
 in the app (tray menu > Credits). After changing dependencies run
 `pwsh -File scripts/update-notices.ps1`; the validator fails while it is stale.

@@ -71,6 +71,8 @@ Load the matching skill before working in its area:
   `main::harden`. Run `cargo audit` in `src/` when dependencies change, and regenerate
   `THIRD-PARTY-NOTICES.txt` with `pwsh -File scripts/update-notices.ps1` (the
   application embeds it as its Credits list).
+- After stopping mixerplus for a check, never restart the installed copy; start
+  the latest release build with `pwsh -File scripts/run-latest.ps1`.
 - Keep Rust debug information and incremental compilation disabled in every
   build profile to limit storage use. Do not add symbol files to distributions.
 - Cargo commands at repository root must pass `--config src/.cargo/config.toml`

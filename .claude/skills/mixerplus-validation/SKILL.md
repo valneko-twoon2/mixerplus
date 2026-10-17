@@ -23,6 +23,12 @@ leaves the saved preference unchanged. For rendering changes, export previews
 with `--snapshot src/target/preview.bmp --preview-dpi 96` and `--preview-dpi 144`.
 These diagnostics only operate on mixerplus's own controls and never change audio.
 
+Only one instance runs, so stop every running mixerplus (the installed copy under
+`%LOCALAPPDATA%\Programs\mixerplus` included) before diagnostics or smoke checks.
+Afterwards never restart the installed copy: it may be older than the code under
+test and confuses the user. Run `pwsh -File scripts/run-latest.ps1`, which stops
+any instance and starts the latest release build.
+
 Before completion, stage task changes, create an English Conventional Commit
 (no `Co-Authored-By` trailer; the commit-msg hook rejects it), and run `pwsh -File scripts/complete-task.ps1`. Never commit pre-existing user
 changes to make the completion check pass.
