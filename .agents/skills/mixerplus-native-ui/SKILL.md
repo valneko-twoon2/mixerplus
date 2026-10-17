@@ -26,8 +26,7 @@ description: Rules for mixerplus's Win32 tray icon and popup - child controls, c
 - The popup imitates the Windows 11 quick settings audio flyout. Keep that look:
   no gradients or custom themes beyond the system light/dark palette and accent
   in `appearance.rs`. The volume value beside each slider is a deliberate mixerplus
-  addition: right of device sliders, and between the icon and the slider on
-  application rows, as in the Windows volume mixer.
+  addition.
 - Views: `View::Presets` (see `mixerplus-presets`) and `View::Mixer`: an output and an
   input group, then the section header and application rows. A group is a title with
   a chevron (`OUTPUT_CHEVRON`, `INPUT_CHEVRON`) and device rows: an item that makes the
