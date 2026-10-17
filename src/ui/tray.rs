@@ -224,7 +224,8 @@ impl App {
                 let _ = SetForegroundWindow(self.hwnd);
                 let chosen = TrackPopupMenu(
                     menu,
-                    TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTALIGN | TPM_BOTTOMALIGN,
+                    // TPM_WORKAREA keeps the menu above the taskbar, like the shell's menus.
+                    TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTALIGN | TPM_BOTTOMALIGN | TPM_WORKAREA,
                     point.x,
                     point.y,
                     None,
