@@ -113,7 +113,6 @@ impl App {
                 for child in self.children.drain(..).chain(spare) {
                     let _ = DestroyWindow(child);
                 }
-                self.navigation = None;
                 self.chrome_count = 0;
                 self.fonts = Fonts::new(scale);
                 self.scale = scale;
@@ -121,17 +120,17 @@ impl App {
             self.work_area = monitor.rcWork;
             self.monitor = monitor.rcMonitor;
             let height = (monitor.rcWork.bottom - monitor.rcWork.top) as f32 / scale;
-            // Fixed parts: endpoints, section header, pager, footer, and margins.
-            self.page_size =
-                (((height - 300.0) / 44.0) as usize).clamp(1, crate::config::MAX_APPLICATION_ROWS);
-            self.device_rows = (((height - 180.0) / 68.0) as usize).max(1);
+            // Fixed parts: margins, padding, and the footer.
+            self.content_limit =
+                ((height - 88.0) as i32).clamp(44, crate::config::MAX_CONTENT_HEIGHT);
             self.view = View::Mixer;
             self.edit = None;
             self.armed_delete = None;
             crate::appearance::set_edit_frame(None);
             self.list_rows = (((height - 210.0) / 42.0) as usize).max(1);
-            self.page = 0;
-            self.device_offset = 0;
+            self.scroll = 0;
+            self.wheel_rest = 0;
+            self.list_offset = 0;
             self.refresh(true)?;
             // Hide focus cues until the keyboard is used, as the shell flyouts do.
             SendMessageW(
@@ -178,8 +177,8 @@ impl App {
                 });
                 SetTimer(Some(self.hwnd), ANIMATION_TIMER, 10, None);
             }
-            if let Some(control) = self.controls.first() {
-                let _ = SetFocus(Some(control.slider));
+            if let Some(first) = self.first_visible_stop() {
+                let _ = SetFocus(Some(first));
             }
             Ok(())
         }

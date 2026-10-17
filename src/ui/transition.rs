@@ -4,7 +4,7 @@ use super::*;
 
 impl App {
     /// The visible view's pixels and window rectangle, if it is worth animating from.
-    pub(super) fn capture_current(&mut self, forward: bool) -> Option<Pending> {
+    pub(super) fn capture_current(&mut self, slide: i32) -> Option<Pending> {
         self.end_transition();
         unsafe {
             if !IsWindowVisible(self.hwnd).as_bool()
@@ -25,7 +25,7 @@ impl App {
                 capture,
                 top: rect.top,
                 height: rect.bottom - rect.top,
-                forward,
+                slide,
             })
         }
     }
@@ -69,8 +69,7 @@ impl App {
                     let _ = ShowWindow(*child, SW_HIDE);
                 }
             }
-            let direction = if pending.forward { 1 } else { -1 };
-            crate::appearance::start_transition(pending.capture, new, self.px(28) * direction);
+            crate::appearance::start_transition(pending.capture, new, self.px(28) * pending.slide);
             self.transition = Some(ViewTransition {
                 start: Instant::now(),
                 from_top: pending.top,

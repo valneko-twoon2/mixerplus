@@ -21,7 +21,8 @@
 
 - **One click away**: click the tray icon to adjust the default output and input, and each app separately. Every slider shows its value and a live level meter.
 - **Mute anything**: click a device's or app's icon.
-- **Device switching**: choose the default output or input from the list behind the chevron, and set each device's own volume there.
+- **Device switching**: the chevron expands the output or input device list in place; choose the default device and set each device's own volume there. The list stays open or closed as you left it.
+- **Scrolling**: when many apps play sound, scroll the mixer with the mouse wheel.
 - **Presets**: save the current volumes and mute states (output, input, every app) under a name and apply them later with one click. Nothing is applied automatically.
 - **Native look**: follows the system light/dark mode and accent color. Pure Win32, no runtime to install.
 - **Open source credits**: right-click the tray icon: *mixerplus について* shows the license and *Credits* lists every bundled library with its license.

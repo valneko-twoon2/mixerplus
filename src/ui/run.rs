@@ -141,28 +141,28 @@ unsafe fn run_initialized() -> Result<()> {
         )?;
         let scale = GetDpiForWindow(hwnd).max(96) as f32 / 96.0;
         let icon = tray_icon()?;
+        let settings_path = Settings::default_path();
         let app = App {
             audio: Audio::new()?,
             hwnd,
             tooltip,
             fonts: Fonts::new(scale),
             icon,
+            items: Vec::new(),
+            scroll: 0,
+            wheel_rest: 0,
+            content_limit: crate::config::MAX_CONTENT_HEIGHT,
             controls: Vec::new(),
             devices: Vec::new(),
             children: Vec::new(),
             spare: Vec::new(),
             clicked: HWND::default(),
-            page: 0,
-            pages: 1,
             signature: Vec::new(),
             taskbar_created: RegisterWindowMessageW(w!("TaskbarCreated")),
             scale,
-            page_size: crate::config::MAX_APPLICATION_ROWS,
-            device_rows: 8,
-            device_offset: 0,
+            list_offset: 0,
             work_area: RECT::default(),
             monitor: RECT::default(),
-            navigation: None,
             chrome_count: 0,
             tray_added: false,
             promotion_attempts: 0,
@@ -172,6 +172,12 @@ unsafe fn run_initialized() -> Result<()> {
                 PresetStore::default_path()
                     .unwrap_or_else(|| std::env::temp_dir().join("mixerplus-presets.json")),
             ),
+            settings: settings_path
+                .as_deref()
+                .map(Settings::load)
+                .unwrap_or_default(),
+            settings_path,
+            refocus: None,
             listed: Vec::new(),
             edit: None,
             armed_delete: None,
@@ -198,8 +204,8 @@ unsafe fn run_initialized() -> Result<()> {
         });
         let arguments: Vec<_> = std::env::args_os().collect();
         if arguments.iter().any(|arg| arg == "--check-ui") {
-            check_page_navigation(hwnd)?;
-            println!("UI check passed: next/previous preserve mixer rows and navigation handles.");
+            check_scrolling(hwnd)?;
+            println!("UI check passed: scrolling and device lists preserve mixer rows.");
             return Ok(());
         }
         if let Some(pair) = arguments.windows(2).find(|pair| pair[0] == "--snapshot") {
@@ -236,6 +242,11 @@ unsafe fn run_initialized() -> Result<()> {
                 let _ = PostMessageW(Some(hwnd), DISMISS, WPARAM(0), LPARAM(0));
                 continue;
             }
+            if message.message == WM_KEYDOWN && message.wParam.0 == VK_TAB_CODE {
+                // Let the mixer scroll rows into view before focus moves.
+                let shift = GetKeyState(VK_SHIFT.0 as i32) < 0;
+                SendMessageW(hwnd, TAB_KEY, Some(WPARAM(shift as usize)), None);
+            }
             if message.message == WM_KEYDOWN && message.wParam.0 == VK_RETURN_CODE {
                 let focus = GetFocus();
                 if !focus.is_invalid() && GetDlgCtrlID(focus) as usize == EDIT_ID {
@@ -256,31 +267,55 @@ const VK_ESCAPE_CODE: usize = 0x1b;
 
 const VK_RETURN_CODE: usize = 0x0d;
 
-fn check_page_navigation(hwnd: HWND) -> Result<()> {
+const VK_TAB_CODE: usize = 0x09;
+
+fn check_scrolling(hwnd: HWND) -> Result<()> {
     let fail =
         |message| windows::core::Error::new(windows::core::HRESULT(0x80004005u32 as i32), message);
-    let (before, navigation, pages) = APP.with(|state| -> Result<_> {
-        let mut state = state.borrow_mut();
-        let app = state.as_mut().ok_or_else(|| fail("Mixer is missing"))?;
+    let with_app = |check: &mut dyn FnMut(&mut App) -> Result<()>| {
+        APP.with(|state| -> Result<()> {
+            let mut state = state.borrow_mut();
+            check(state.as_mut().ok_or_else(|| fail("Mixer is missing"))?)
+        })
+    };
+    let sliders = |app: &App| app.controls.iter().map(|c| c.slider).collect::<Vec<_>>();
+    let mut before = Vec::new();
+    with_app(&mut |app| {
         app.open()?;
-        Ok((
-            app.controls
-                .iter()
-                .map(|c| c.row.key.clone())
-                .collect::<Vec<_>>(),
-            app.navigation
-                .ok_or_else(|| fail("Navigation is missing"))?,
-            app.pages,
-        ))
+        before = sliders(app);
+        // Scroll to the end and back; rows are moved, never rebuilt.
+        while app.scroll_by(1)? {}
+        let bottom = app.scroll;
+        while app.scroll_by(-1)? {}
+        if app.scroll != 0 || sliders(app) != before {
+            return Err(fail("Scrolling changed the mixer rows"));
+        }
+        if bottom == 0 {
+            println!("Scroll check skipped: every mixer row fits.");
+        }
+        Ok(())
     })?;
-    if pages < 2 {
-        println!("Pagination check skipped: fewer than two pages.");
-        return Ok(());
-    }
-    for (button, expected_page) in [(navigation.next, 1), (navigation.previous, 0)] {
+    // Toggle the output devices twice through the native click path, which also
+    // leaves the saved preference as it was.
+    let (mut initial, mut listed) = (false, 0);
+    with_app(&mut |app| {
+        initial = app.settings.show_outputs;
+        Ok(())
+    })?;
+    for expanded in [!initial, initial] {
+        let mut chevron = HWND::default();
+        with_app(&mut |app| {
+            listed = app.devices.len();
+            let index = app
+                .controls
+                .iter()
+                .position(|c| c.kind == Kind::Endpoint { input: false })
+                .ok_or_else(|| fail("The output row is missing"))?;
+            chevron = unsafe { GetDlgItem(Some(app.hwnd), (ROW_ID + index * 3 + 2) as i32)? };
+            Ok(())
+        })?;
         unsafe {
-            // Exercise the native notification path, including deferred row refresh.
-            SendMessageW(button, BM_CLICK, None, None);
+            SendMessageW(chevron, BM_CLICK, None, None);
             let mut message = MSG::default();
             while PeekMessageW(
                 &mut message,
@@ -294,31 +329,14 @@ fn check_page_navigation(hwnd: HWND) -> Result<()> {
                 DispatchMessageW(&message);
             }
         }
-        APP.with(|state| -> Result<()> {
-            let state = state.borrow();
-            let app = state.as_ref().ok_or_else(|| fail("Mixer is missing"))?;
-            let current = app
-                .navigation
-                .ok_or_else(|| fail("Navigation was destroyed"))?;
-            if app.page != expected_page
-                || current.previous != navigation.previous
-                || current.next != navigation.next
-            {
-                return Err(fail(
-                    "Page navigation changed control identity or selected the wrong page",
-                ));
+        with_app(&mut |app| {
+            // The input list may stay expanded; only the output devices come and go.
+            let shown = app.devices.len();
+            if app.settings.show_outputs == expanded && (shown > listed) == expanded {
+                Ok(())
+            } else {
+                Err(fail("The chevron did not toggle the output device list"))
             }
-            if expected_page == 0
-                && app
-                    .controls
-                    .iter()
-                    .map(|c| c.row.key.clone())
-                    .collect::<Vec<_>>()
-                    != before
-            {
-                return Err(fail("Returning to page one changed mixer rows"));
-            }
-            Ok(())
         })?;
     }
     Ok(())

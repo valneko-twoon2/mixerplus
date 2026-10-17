@@ -16,9 +16,10 @@ levels. Device-switch checks require the actual devices and must be reported
 as unverified when unavailable. Do not automate an Explorer restart on the
 user's desktop solely to test icon recovery.
 
-For pagination changes, stop mixerplus and run the release binary with `--check-ui`.
-This exercises native next/previous clicks and checks that page-one rows and
-navigation HWNDs survive the round trip. For rendering changes, export previews
+For mixer scrolling or device list changes, stop mixerplus and run the release binary
+with `--check-ui`. It scrolls to the end and back, checking that the rows survive,
+and toggles the output device list twice through native chevron clicks, which
+leaves the saved preference unchanged. For rendering changes, export previews
 with `--snapshot src/target/preview.bmp --preview-dpi 96` and `--preview-dpi 144`.
 These diagnostics only operate on mixerplus's own controls and never change audio.
 

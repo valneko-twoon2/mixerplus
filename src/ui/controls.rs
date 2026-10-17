@@ -216,41 +216,19 @@ impl App {
     }
 
     pub(super) fn build_chrome(&mut self) -> Result<()> {
-        let small = self.fonts.small;
-        let icon = self.fonts.icon;
-        let previous = self.button(
-            "\u{e76b}",
-            PREVIOUS,
-            [8, 0, 40, 32],
-            icon,
-            pack(GLYPH, 0, false),
-        )?;
-        let label = self.label("", [56, 0, 248, 32], small, SECONDARY)?;
-        let next = self.button(
-            "\u{e76c}",
-            NEXT,
-            [312, 0, 40, 32],
-            icon,
-            pack(GLYPH, 0, false),
-        )?;
         self.button(
             "その他の音量設定",
             SETTINGS_LINK,
             [8, 0, 220, 32],
-            small,
+            self.fonts.small,
             pack(LINK, 0, false),
         )?;
-        self.navigation = Some(Navigation {
-            previous,
-            next,
-            label,
-        });
         self.chrome_count = self.children.len();
         Ok(())
     }
 
-    /// Removes the current page's rows; chrome keeps its window identities. Rows are
-    /// hidden for reuse by the next page, since creating and destroying windows
+    /// Removes the current view's rows; chrome keeps its window identities. Rows are
+    /// hidden for reuse by the next view, since creating and destroying windows
     /// dominated the cost of switching views.
     pub(super) fn clear_rows(&mut self) {
         let rows: Vec<HWND> = self.children[self.chrome_count.min(self.children.len())..].to_vec();
@@ -284,38 +262,7 @@ impl App {
         self.clicked = HWND::default();
         self.controls.clear();
         self.devices.clear();
-    }
-
-    /// Shows the pager at `y`, or hides it.
-    pub(super) fn place_navigation(&mut self, y: Option<i32>) {
-        let Some(navigation) = self.navigation else {
-            return;
-        };
-        set_text(
-            navigation.label,
-            &format!("{} / {}", self.page + 1, self.pages),
-        );
-        unsafe {
-            for (hwnd, x, width) in [
-                (navigation.previous, 8, 40),
-                (navigation.label, 56, 248),
-                (navigation.next, 312, 40),
-            ] {
-                let _ = SetWindowPos(
-                    hwnd,
-                    None,
-                    self.px(x),
-                    self.px(y.unwrap_or(0)),
-                    self.px(width),
-                    self.px(32),
-                    SWP_NOZORDER | SWP_NOACTIVATE,
-                );
-                // Far cheaper than SWP_SHOWWINDOW and SWP_HIDEWINDOW.
-                let _ = ShowWindow(hwnd, if y.is_some() { SW_SHOWNA } else { SW_HIDE });
-            }
-            let _ = EnableWindow(navigation.previous, self.page > 0);
-            let _ = EnableWindow(navigation.next, self.page + 1 < self.pages);
-        }
+        self.items.clear();
     }
 
     pub(super) fn update_control(&mut self, index: usize) {

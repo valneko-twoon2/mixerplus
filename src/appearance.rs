@@ -122,6 +122,8 @@ const DARK: Palette = Palette {
 struct Layout {
     footer: i32,
     dividers: Vec<i32>,
+    /// The scroll position indicator at the popup's right edge.
+    scrollbar: Option<RECT>,
     /// The rounded frame behind an inline text box, in popup client pixels.
     edit: Option<RECT>,
 }
@@ -174,12 +176,14 @@ pub fn load_theme() {
     }
 }
 
-/// Records the footer top and section divider rows in popup client pixels.
-pub fn set_layout(footer: i32, dividers: Vec<i32>) {
+/// Records the footer top, section divider rows, and scroll indicator in popup
+/// client pixels.
+pub fn set_layout(footer: i32, dividers: Vec<i32>, scrollbar: Option<RECT>) {
     LAYOUT.with(|layout| {
         let mut layout = layout.borrow_mut();
         layout.footer = footer;
         layout.dividers = dividers;
+        layout.scrollbar = scrollbar;
     });
 }
 
@@ -284,6 +288,10 @@ unsafe fn background_sized(hwnd: HWND, dc: HDC, size: Option<(i32, i32)>) {
                             palette.divider,
                         );
                     }
+                }
+                if let Some(bar) = layout.scrollbar {
+                    // Like the thin indicator a WinUI scroll bar collapses to.
+                    solid_round(dc, bar, bar.right - bar.left, palette.track);
                 }
                 if let Some(edit) = layout.edit {
                     let scale = scale_of(hwnd);

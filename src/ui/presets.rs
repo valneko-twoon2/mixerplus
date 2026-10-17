@@ -42,8 +42,8 @@ impl App {
             )?;
         }
         y += 44;
-        self.device_offset = self
-            .device_offset
+        self.list_offset = self
+            .list_offset
             .min(presets.len().saturating_sub(self.list_rows));
         if presets.is_empty() {
             self.label("プリセットがありません", [16, y, 328, 40], body, SECONDARY)?;
@@ -52,7 +52,7 @@ impl App {
         for (i, preset) in presets
             .iter()
             .enumerate()
-            .skip(self.device_offset)
+            .skip(self.list_offset)
             .take(self.list_rows)
         {
             let base = PRESET_ID + i * 4;
@@ -112,8 +112,7 @@ impl App {
         if let (Some(state), Some(hwnd)) = (self.edit.as_mut(), focus) {
             state.hwnd = hwnd;
         }
-        self.place_navigation(None);
-        self.finish_layout(y + 8, Vec::new())?;
+        self.finish_layout(y + 8, Vec::new(), None)?;
         if let Some(hwnd) = focus
             && unsafe { GetForegroundWindow() } == self.hwnd
         {

@@ -9,9 +9,9 @@ description: Rules for mixerplus's Win32 tray icon and popup - child controls, c
 
 - Keep the popup within the active monitor work area and support DPI, keyboard
   navigation, Escape, outside-click dismissal, and Explorer restart recovery.
-- Keep navigation and device buttons alive across page changes. Defer row
-  rebuilds until native click notifications unwind; never recycle the clicked
-  button's HWND as a different control. Exercise `--check-ui` after pager edits.
+- Defer row rebuilds until native click notifications unwind; never recycle the
+  clicked button's HWND as a different control. Exercise `--check-ui` after mixer
+  scrolling or device list edits.
 - The popup refreshes every second while visible. Update captions with
   `set_text`, which skips unchanged text, so polling does not repaint controls.
 - `clear_rows` hides row controls into `App::spare` and `child` reuses them, since
@@ -27,9 +27,16 @@ description: Rules for mixerplus's Win32 tray icon and popup - child controls, c
   no gradients or custom themes beyond the system light/dark palette and accent
   in `appearance.rs`. The volume value beside each slider is a deliberate mixerplus
   addition.
-- Views: `View::Presets` (see `mixerplus-presets`), `View::Mixer` (endpoint rows with a chevron, then application rows) and
-  `View::Devices` (in-popup default-device list with a volume slider per device). View changes are posted as
-  `REFRESH_PAGE` so the clicked button's notification unwinds first.
+- Views: `View::Presets` (see `mixerplus-presets`) and `View::Mixer`: endpoint rows,
+  each with a chevron that expands its default-device list (a volume slider per
+  device) inline, then the section header and application rows. The expanded
+  state is remembered in `settings.json` (`settings.rs`). View changes and chevron
+  toggles are posted as `REFRESH_PAGE` so the clicked button's notification unwinds first.
+- Mixer rows are `Item`s that scroll one item per wheel notch. Scrolling only moves,
+  shows, and hides existing windows (`place_items`); it never rebuilds. Child windows
+  cannot be clipped, so only whole items are shown, and the content keeps the height of
+  the tallest scroll position so the popup does not resize while scrolling. Tab scrolls
+  the next item into view (`TAB_KEY`) because hidden windows are not tab stops.
 - Owner-drawn buttons pack their kind, Fluent glyph, and selection/mute flag in
   `GWLP_USERDATA` (`appearance::pack`). Use `set_glyph`/`set_flag` for updates.
 - Sliders show a live peak meter (`IAudioMeterInformation`, polled every 33 ms

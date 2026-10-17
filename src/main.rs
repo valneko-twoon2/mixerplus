@@ -7,6 +7,7 @@ mod config;
 mod drawing;
 mod json;
 mod presets;
+mod settings;
 mod ui;
 
 /// Restricts where code can be loaded from before any other work happens.

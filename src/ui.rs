@@ -23,6 +23,7 @@ use crate::{
     appearance::{GLYPH, ITEM, LINK, SECONDARY, pack},
     audio::{Audio, Device, Row},
     presets::{PresetStore, sanitize_name},
+    settings::Settings,
 };
 
 mod controls;
@@ -46,8 +47,6 @@ const DISMISS: u32 = WM_APP + 3;
 /// Refreshes without forcing a rebuild, so a new default only moves the selection.
 const REFRESH_STATE: u32 = WM_APP + 4;
 const MORE: usize = 12;
-const PREVIOUS: usize = 13;
-const NEXT: usize = 14;
 const BACK: usize = 15;
 const SETTINGS_LINK: usize = 16;
 /// Each mixer row uses three IDs: slider, mute button, and device chevron.
@@ -60,6 +59,8 @@ const NEW_PRESET: usize = 18;
 const PRESET_ID: usize = 3000;
 const COMMIT_EDIT: u32 = WM_APP + 5;
 const SHOW_ABOUT: u32 = WM_APP + 6;
+/// Sent before the dialog manager handles Tab, with the Shift state in `WPARAM`.
+const TAB_KEY: u32 = WM_APP + 7;
 const EM_SETSEL: u32 = 0xb1;
 const EM_SETLIMITTEXT: u32 = 0xc5;
 const ES_AUTOHSCROLL_STYLE: u32 = 0x80;
@@ -88,6 +89,8 @@ const STAR_FILLED_GLYPH: u16 = 0xe735;
 const RENAME_GLYPH: u16 = 0xe70f;
 const DELETE_GLYPH: u16 = 0xe74d;
 const CONFIRM_GLYPH: u16 = 0xe73e;
+const CHEVRON_DOWN: u16 = 0xe70d;
+const CHEVRON_UP: u16 = 0xe70e;
 
 thread_local! {
     static APP: RefCell<Option<App>> = const { RefCell::new(None) };
@@ -96,7 +99,6 @@ thread_local! {
 #[derive(Clone, Copy, PartialEq)]
 enum View {
     Mixer,
-    Devices { input: bool },
     Presets,
 }
 
@@ -173,11 +175,13 @@ impl Drop for Control {
     }
 }
 
-#[derive(Clone, Copy)]
-struct Navigation {
-    previous: HWND,
-    next: HWND,
-    label: HWND,
+/// One scroll step of the mixer: a row, or the section header.
+struct Item {
+    height: i32,
+    /// Windows with their physical position: x in the popup, y from the item's top.
+    windows: Vec<(HWND, POINT)>,
+    /// A section divider this many logical pixels below the item's top.
+    divider: Option<i32>,
 }
 
 struct Fonts {
@@ -231,15 +235,16 @@ impl Drop for Fonts {
     }
 }
 
-/// Default endpoint rows tagged `input`, then application rows.
-type Snapshot = (Vec<(bool, Row)>, Vec<Row>);
+/// Default endpoint rows tagged `input`, application rows, then the expanded device lists.
+type Snapshot = (Vec<(bool, Row)>, Vec<Row>, Vec<(bool, Vec<Device>)>);
 
 /// The old view's pixels and window rectangle, captured before a view change.
 struct Pending {
     capture: crate::appearance::Capture,
     top: i32,
     height: i32,
-    forward: bool,
+    /// Direction the new content slides in from: 1, -1, or 0 for a plain cross-fade.
+    slide: i32,
 }
 
 /// A running cross-fade between views while the window resizes to fit the new one.
@@ -277,23 +282,30 @@ struct App {
     clicked: HWND,
     fonts: Fonts,
     icon: HICON,
-    page: usize,
-    pages: usize,
+    /// Mixer rows and headers in order; `scroll` is the first one shown.
+    items: Vec<Item>,
+    scroll: usize,
+    /// Wheel movement below one notch, kept until it adds up to a step.
+    wheel_rest: i32,
+    /// Tallest the scrolling content may be, in logical pixels.
+    content_limit: i32,
     signature: Vec<String>,
     taskbar_created: u32,
     scale: f32,
-    page_size: usize,
-    device_rows: usize,
-    device_offset: usize,
+    /// First preset shown on the preset page.
+    list_offset: usize,
     work_area: RECT,
     monitor: RECT,
-    navigation: Option<Navigation>,
     chrome_count: usize,
     tray_added: bool,
     promotion_attempts: u32,
     view: View,
     animation: Option<Animation>,
     presets: PresetStore,
+    settings: Settings,
+    settings_path: Option<std::path::PathBuf>,
+    /// The endpoint row whose chevron should take focus after the next rebuild.
+    refocus: Option<bool>,
     /// Names shown on the preset page, in order; button IDs index into it.
     listed: Vec<String>,
     edit: Option<EditState>,

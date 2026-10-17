@@ -68,6 +68,7 @@ pub(super) unsafe extern "system" fn window_proc(
                     }
                 }
                 REFRESH_PAGE => app.refresh(true),
+                TAB_KEY => app.reveal_tab_target(wparam.0 != 0),
                 REFRESH_STATE => app.refresh(false),
                 COMMIT_EDIT => app.commit_edit(),
                 DISMISS => {
@@ -181,17 +182,6 @@ pub(super) unsafe extern "system" fn window_proc(
 impl App {
     fn command(&mut self, id: usize) -> Result<()> {
         match id {
-            PREVIOUS | NEXT => {
-                self.page = if id == PREVIOUS {
-                    self.page.saturating_sub(1)
-                } else {
-                    (self.page + 1).min(self.pages - 1)
-                };
-                // Rebuild rows after the native button notification has unwound.
-                unsafe {
-                    PostMessageW(Some(self.hwnd), REFRESH_PAGE, WPARAM(0), LPARAM(0))?;
-                }
-            }
             BACK => self.show_view(View::Mixer)?,
             PRESETS_BUTTON => self.show_view(View::Presets)?,
             NEW_PRESET => {
@@ -240,7 +230,7 @@ impl App {
                         if let Some(Kind::Endpoint { input }) =
                             self.controls.get(index).map(|c| c.kind)
                         {
-                            self.show_view(View::Devices { input })?;
+                            self.toggle_devices(input)?;
                         }
                     }
                     _ => {}
@@ -251,31 +241,38 @@ impl App {
         Ok(())
     }
 
-    /// Scrolls the device list or turns application pages.
+    /// Expands or collapses the device list under an endpoint row and remembers it.
+    fn toggle_devices(&mut self, input: bool) -> Result<()> {
+        self.settings.toggle_devices(input);
+        if let Some(path) = &self.settings_path {
+            // An unsaved preference only lasts until exit; it is not worth an error.
+            let _ = self.settings.save(path);
+        }
+        self.pending = self.capture_current(0);
+        self.refocus = Some(input);
+        // Rebuild rows after the native button notification has unwound.
+        self.post_refresh()
+    }
+
+    /// Scrolls the mixer rows or the preset list, one row per wheel notch.
     fn wheel(&mut self, delta: i16) -> Result<()> {
-        let forward = delta < 0;
+        self.wheel_rest += delta as i32;
+        // Positive deltas scroll toward the top.
+        let steps = -(self.wheel_rest / WHEEL_DELTA as i32) as isize;
+        self.wheel_rest %= WHEEL_DELTA as i32;
+        if steps == 0 {
+            return Ok(());
+        }
         match self.view {
-            View::Devices { .. } | View::Presets => {
-                let offset = if forward {
-                    self.device_offset + 1
-                } else {
-                    self.device_offset.saturating_sub(1)
-                };
-                if offset != self.device_offset {
-                    self.device_offset = offset;
+            View::Presets => {
+                let offset = self.list_offset.saturating_add_signed(steps);
+                if offset != self.list_offset {
+                    self.list_offset = offset;
                     return self.refresh(true);
                 }
             }
             View::Mixer => {
-                let page = if forward {
-                    (self.page + 1).min(self.pages - 1)
-                } else {
-                    self.page.saturating_sub(1)
-                };
-                if page != self.page {
-                    self.page = page;
-                    return self.refresh(true);
-                }
+                self.scroll_by(steps)?;
             }
         }
         Ok(())

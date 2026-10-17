@@ -149,17 +149,7 @@ pub struct PresetStore {
 
 impl PresetStore {
     pub fn default_path() -> Option<PathBuf> {
-        use windows::Win32::{
-            System::Com::CoTaskMemFree,
-            UI::Shell::{FOLDERID_RoamingAppData, KF_FLAG_CREATE, SHGetKnownFolderPath},
-        };
-        unsafe {
-            let folder =
-                SHGetKnownFolderPath(&FOLDERID_RoamingAppData, KF_FLAG_CREATE, None).ok()?;
-            let path = folder.to_string().ok();
-            CoTaskMemFree(Some(folder.0.cast()));
-            Some(PathBuf::from(path?).join("mixerplus").join("presets.json"))
-        }
+        crate::settings::data_folder().map(|folder| folder.join("presets.json"))
     }
 
     /// Loads the file; a missing file is empty, and an unreadable one is set aside as
