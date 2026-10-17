@@ -34,6 +34,9 @@
 }
 
 html {
+  /* Keep the scroll bar's width reserved, or the centered layout shifts between
+     short and long pages. */
+  overflow-y: scroll;
   background: var(--background);
 }
 
