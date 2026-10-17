@@ -424,6 +424,11 @@ impl Audio {
                 }
                 let control: IAudioSessionControl2 = control.cast()?;
                 let pid = control.GetProcessId()?;
+                // Windows keeps the session of an application that has exited, for
+                // example one that crashed while holding a stream.
+                if pid != 0 && process_gone(pid) {
+                    continue;
+                }
                 let volume: ISimpleAudioVolume = control.cast()?;
                 let meter: Option<IAudioMeterInformation> = control.cast().ok();
                 let icon_path = if pid == 0 { None } else { process_path(pid) };
@@ -734,6 +739,21 @@ const PKEY_FILE_DESCRIPTION: PROPERTYKEY = PROPERTYKEY {
     fmtid: GUID::from_u128(0x0cef7d53_fa64_11d1_a203_0000f81fedee),
     pid: 3,
 };
+
+/// Whether no process has this ID. A process that cannot be opened for lack of
+/// permission, such as an elevated application, still exists.
+fn process_gone(pid: u32) -> bool {
+    const ERROR_INVALID_PARAMETER: u32 = 0x8007_0057;
+    match unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) } {
+        Ok(handle) => {
+            unsafe {
+                let _ = CloseHandle(handle);
+            }
+            false
+        }
+        Err(error) => error.code().0 as u32 == ERROR_INVALID_PARAMETER,
+    }
+}
 
 fn process_path(pid: u32) -> Option<String> {
     unsafe {

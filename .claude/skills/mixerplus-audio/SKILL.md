@@ -9,6 +9,8 @@ description: Rules for mixerplus Core Audio work - COM lifetime, endpoint and se
   before `CoUninitialize`. Free Windows-owned strings and clear PROPVARIANT values.
 - Treat endpoint removal, session expiration, absent microphones, and process
   metadata access denial as normal operating conditions, not errors to report.
+  Sessions whose process has exited (`OpenProcess` reports an invalid parameter, as
+  opposed to access denied) are skipped; Windows can keep them after a crash.
 - Never change system audio during startup or background polling. Volume, mute,
   and default-device changes must follow an explicit user interaction.
 - Like the Windows volume mixer, each application has one row across all active
