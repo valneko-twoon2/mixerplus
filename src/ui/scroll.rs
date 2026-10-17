@@ -8,7 +8,11 @@ use windows::Win32::Graphics::Dwm::DwmFlush;
 pub(super) const CONTENT_TOP: i32 = 8;
 const CONTENT_BOTTOM: i32 = 8;
 /// Logical height of the pinned header with the shortcut hint.
-pub(super) const HEADER: i32 = 40;
+const HEADER: i32 = 40;
+/// Logical height of the popup's fixed parts: margins, padding, and the footer.
+pub(super) const FIXED_HEIGHT: i32 = 88;
+/// The smallest logical height left for the scrolling rows.
+pub(super) const MIN_CONTENT: i32 = 44;
 /// Logical distance one wheel notch scrolls, about one row like the shell flyout.
 const NOTCH: i32 = 48;
 /// How long a wheel or page scroll eases out.
@@ -77,6 +81,17 @@ pub(super) unsafe extern "system" fn viewport_proc(
 }
 
 impl App {
+    /// Logical height of the pinned header for the current monitor: none without the
+    /// shortcut to show, or when the work area is too short to give it room.
+    pub(super) fn header_height(&self) -> i32 {
+        let work = (self.work_area.bottom - self.work_area.top) as f32 / self.scale;
+        if self.hotkey && work - FIXED_HEIGHT as f32 - HEADER as f32 >= MIN_CONTENT as f32 {
+            HEADER
+        } else {
+            0
+        }
+    }
+
     /// The largest scroll offset in physical pixels.
     fn max_scroll(&self) -> i32 {
         (self.content_height - self.viewport_height).max(0)
@@ -86,8 +101,7 @@ impl App {
     /// visible part; the viewport clips rows that are partly scrolled out.
     pub(super) fn place_items(&mut self) -> Result<()> {
         let total: i32 = self.items.iter().map(|item| item.height).sum();
-        // Without the shortcut there is nothing to pin.
-        self.show_header(if self.hotkey { HEADER } else { 0 });
+        self.show_header(self.header_height());
         let footer = CONTENT_TOP + total.min(self.content_limit) + CONTENT_BOTTOM;
         self.content_height = self.px(CONTENT_TOP + total + CONTENT_BOTTOM);
         self.viewport_height = self.px(footer);
@@ -118,7 +132,7 @@ impl App {
         Ok(())
     }
 
-    /// Section dividers at the current scroll offset, in popup client pixels.
+    /// Section dividers at the current scroll offset, relative to the viewport.
     fn dividers(&self) -> Vec<i32> {
         self.items
             .iter()

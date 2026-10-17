@@ -265,9 +265,18 @@ impl App {
         // Painted before the rows in captures, as on screen.
         self.children.push(self.viewport);
         // The pinned header, like the shell's output page: it stays while rows scroll.
+        // Its title is regular weight, as the shell's page title is; the section
+        // headings below it are semibold.
         let title = self.label("音声出力", [16, 2, 72, 36], self.fonts.body, 0)?;
         let keys = self.keycaps("Win+Alt+V", [92, 2, 140, 36])?;
+        // Hidden until a view shows it, so `show_header` can skip unchanged states.
+        for hwnd in [title, keys] {
+            unsafe {
+                let _ = ShowWindow(hwnd, SW_HIDE);
+            }
+        }
         self.header_windows = vec![title, keys];
+        self.header = 0;
         self.button(
             "その他の音量設定",
             SETTINGS_LINK,
@@ -281,6 +290,10 @@ impl App {
 
     /// Shows the pinned header with this logical `height`, or hides it for 0.
     pub(super) fn show_header(&mut self, height: i32) {
+        if (self.header > 0) == (height > 0) {
+            self.header = height;
+            return;
+        }
         self.header = height;
         for &hwnd in &self.header_windows {
             unsafe {

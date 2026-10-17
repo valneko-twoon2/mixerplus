@@ -182,8 +182,8 @@ pub fn load_theme() {
     }
 }
 
-/// Records the footer top and section divider rows in popup client pixels, and
-/// removes the scroll bar.
+/// Records the footer top (popup client pixels), the section divider rows (relative
+/// to the row viewport), and where the viewport starts, and removes the scroll bar.
 pub fn set_layout(footer: i32, dividers: Vec<i32>, top: i32) {
     LAYOUT.with(|layout| {
         let mut layout = layout.borrow_mut();
@@ -195,12 +195,13 @@ pub fn set_layout(footer: i32, dividers: Vec<i32>, top: i32) {
 }
 
 /// Names the popup's row container, which paints the surface, dividers, and text box
-/// frame like the popup itself. It sits at the popup's client origin.
+/// frame like the popup itself. It starts `Layout::top` below the popup's client
+/// origin: at the origin on the preset page, below the pinned header on the mixer.
 pub fn set_viewport(hwnd: HWND) {
     VIEWPORT.set(hwnd);
 }
 
-/// Moves the section dividers, in popup client pixels, after scrolling.
+/// Moves the section dividers, relative to the row viewport, after scrolling.
 pub fn set_dividers(dividers: Vec<i32>) {
     LAYOUT.with(|layout| layout.borrow_mut().dividers = dividers);
 }
@@ -308,6 +309,7 @@ unsafe fn background_sized(hwnd: HWND, dc: HDC, size: Option<(i32, i32)>) {
                 for y in layout
                     .dividers
                     .iter()
+                    .filter(|&&y| y > 0)
                     .map(|y| y + offset)
                     .chain([layout.footer])
                 {

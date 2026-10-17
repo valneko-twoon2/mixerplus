@@ -47,7 +47,8 @@ description: Rules for mixerplus's Win32 tray icon and popup - child controls, c
   starts below it (`App::header`), so dividers are viewport-relative and the popup
   paints them offset by `Layout::top`.
 - Row controls are children of the viewport (`ui/scroll.rs`), a control-parent child
-  window at the popup's client origin that clips them and forwards their notifications
+  window below the pinned header (at the client origin on the preset page) that
+  clips them and forwards their notifications
   to the popup; the footer link stays a direct child. The mixer scrolls by pixels with
   `ScrollWindowEx` and never rebuilds to scroll (about 1 ms per step). Wheel and page
   scrolls ease out over time; a thread waits on `DwmFlush` and posts `SCROLL_FRAME`
