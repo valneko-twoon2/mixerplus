@@ -28,7 +28,7 @@ mod transition;
 
 pub use controls::{
     draw_item, install_button, install_label, install_slider, recycle, set_app_icon, set_flag,
-    set_icon_fonts, set_meter,
+    set_glyph, set_icon_fonts, set_meter,
 };
 pub use icon::tray_icon;
 use transition::compose;

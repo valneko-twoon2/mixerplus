@@ -21,7 +21,7 @@ use windows::{
 
 use crate::{
     appearance::{GLYPH, ITEM, LINK, SECONDARY, pack},
-    audio::{Audio, Device, Row, SPATIAL_OFF, Spatial},
+    audio::{Audio, Device, Row, SPATIAL_OFF, Spatial, Volume},
     presets::{PresetStore, sanitize_name},
     settings::Settings,
 };
@@ -57,6 +57,8 @@ const SPATIAL_ID: usize = 2000;
 const EDIT_ID: usize = 19;
 const OUTPUT_CHEVRON: usize = 20;
 const INPUT_CHEVRON: usize = 21;
+const OUTPUT_MUTE: usize = 22;
+const INPUT_MUTE: usize = 23;
 const PRESETS_BUTTON: usize = 17;
 const NEW_PRESET: usize = 18;
 /// Each preset row uses four IDs: apply, favorite, rename, and delete.
@@ -87,7 +89,9 @@ const MAX_SPARE: usize = 96;
 
 // Segoe Fluent Icons code points.
 const SPEAKER: u16 = 0xe7f5;
+const MUTED: u16 = 0xe74f;
 const MICROPHONE: u16 = 0xe720;
+const MICROPHONE_OFF: u16 = 0xec54;
 const PRESET_GLYPH: u16 = 0xf4c3;
 const ADD_GLYPH: u16 = 0xe710;
 const STAR_GLYPH: u16 = 0xe734;
@@ -152,6 +156,13 @@ enum Kind {
     Device,
     /// Application row: icon mute button with a badge.
     App,
+}
+
+/// The mute button in a group heading, which mutes the group's default device.
+struct GroupMute {
+    input: bool,
+    button: HWND,
+    volume: Volume,
 }
 
 struct Control {
@@ -311,6 +322,7 @@ struct App {
     tooltip: HWND,
     // Declared after the controls that use them so windows are destroyed first.
     controls: Vec<Control>,
+    group_mutes: Vec<GroupMute>,
     devices: Vec<(HWND, Device)>,
     /// Spatial sound buttons with their format subtypes.
     spatial: Vec<(HWND, String)>,

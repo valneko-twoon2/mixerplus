@@ -30,7 +30,9 @@ description: Rules for mixerplus's Win32 tray icon and popup - child controls, c
 - Views: `View::Presets` (see `mixerplus-presets`) and `View::Mixer`: an output and an
   input group, then the section header and application rows. A group is a title with
   a chevron (`OUTPUT_CHEVRON`, `INPUT_CHEVRON`) and device rows: an item that makes the
-  device the default and the device's own volume (no mute button). Collapsed, a
+  device the default and the device's own volume (no per-device mute button). The
+  heading's mute button (`OUTPUT_MUTE`, `INPUT_MUTE`, `GroupMute`) mutes the default
+  device; its glyph follows the level and mute state and is refreshed with the rows. Collapsed, a
   group shows only its default device; expanded, every device, and the output group
   ends with its spatial sound formats (立体音響). The input group starts below a
   divider. The expanded state is remembered in `settings.json` (`settings.rs`). View

@@ -61,6 +61,20 @@ impl App {
                     }))
                     .collect();
                 if !force && signature == self.signature {
+                    // A new default only moves the selection in a device list, and the
+                    // group mute buttons follow it.
+                    for (input, devices) in &state.lists {
+                        if let Some(volume) = devices
+                            .iter()
+                            .find(|d| d.selected)
+                            .and_then(|d| d.volume.clone())
+                            && let Some(mute) =
+                                self.group_mutes.iter_mut().find(|m| m.input == *input)
+                        {
+                            mute.volume = volume;
+                        }
+                    }
+                    self.update_group_mutes();
                     // A new default only moves the selection in a device list.
                     let devices = state.lists.into_iter().flat_map(|(_, devices)| devices);
                     for (device, (item, old)) in devices.zip(&mut self.devices) {
@@ -191,7 +205,8 @@ impl App {
         let has_endpoints = !lists.is_empty();
         for (index, (input, devices)) in lists.into_iter().enumerate() {
             // The input group follows the output group below a divider.
-            self.group_heading(input, index > 0)?;
+            let default = devices.iter().find(|d| d.selected);
+            self.group_heading(input, index > 0, default.and_then(|d| d.volume.clone()))?;
             if !input && let Some(default) = devices.iter().find(|d| d.selected) {
                 self.spatial_device = default.id.clone();
             }
@@ -258,6 +273,7 @@ impl App {
             })?;
         }
         self.place_items()?;
+        self.update_group_mutes();
         if unsafe { GetForegroundWindow() } != self.hwnd {
             self.refocus = None;
             return Ok(());
@@ -285,7 +301,7 @@ impl App {
 
     /// The title of the output or input group, with the chevron that expands it from
     /// the default device to every device. Below a divider when `divided`.
-    fn group_heading(&mut self, input: bool, divided: bool) -> Result<()> {
+    fn group_heading(&mut self, input: bool, divided: bool, volume: Option<Volume>) -> Result<()> {
         let (title, icon) = (self.fonts.title, self.fonts.icon);
         let expanded = self.settings.shows_devices(input);
         let top = if divided { 9 } else { 0 };
@@ -295,7 +311,30 @@ impl App {
             } else {
                 "出力デバイス"
             };
-            app.label(text, [16, top + 2, 280, 36], title, 0)?;
+            app.label(text, [16, top + 2, 240, 36], title, 0)?;
+            if let Some(volume) = volume {
+                let button = app.button(
+                    "",
+                    if input { INPUT_MUTE } else { OUTPUT_MUTE },
+                    [264, top + 2, 40, 36],
+                    icon,
+                    pack(GLYPH, 0, false),
+                )?;
+                app.tool(
+                    TTM_ADDTOOLW,
+                    button,
+                    if input {
+                        "入力をミュート／解除"
+                    } else {
+                        "出力をミュート／解除"
+                    },
+                );
+                app.group_mutes.push(GroupMute {
+                    input,
+                    button,
+                    volume,
+                });
+            }
             let chevron = app.button(
                 "",
                 if input { INPUT_CHEVRON } else { OUTPUT_CHEVRON },

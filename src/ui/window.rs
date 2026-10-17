@@ -207,6 +207,16 @@ impl App {
         match id {
             BACK => self.show_view(View::Mixer)?,
             OUTPUT_CHEVRON | INPUT_CHEVRON => self.toggle_devices(id == INPUT_CHEVRON)?,
+            OUTPUT_MUTE | INPUT_MUTE => {
+                if let Some(mute) = self
+                    .group_mutes
+                    .iter()
+                    .find(|mute| mute.input == (id == INPUT_MUTE))
+                {
+                    mute.volume.toggle_mute()?;
+                }
+                self.update_group_mutes();
+            }
             PRESETS_BUTTON => self.show_view(View::Presets)?,
             NEW_PRESET => {
                 self.edit = Some(EditState {

@@ -170,6 +170,7 @@ unsafe fn run_initialized() -> Result<()> {
             drag: None,
             track_hot: false,
             controls: Vec::new(),
+            group_mutes: Vec::new(),
             devices: Vec::new(),
             spatial: Vec::new(),
             spatial_device: String::new(),

@@ -2,6 +2,19 @@
 
 use super::*;
 
+/// The glyph of a group's mute button: the speaker's waves follow the level.
+fn endpoint_glyph(input: bool, level: i32, muted: bool) -> u16 {
+    match (input, muted, level) {
+        (true, true, _) => MICROPHONE_OFF,
+        (true, false, _) => MICROPHONE,
+        (false, true, _) => MUTED,
+        (false, false, 0) => 0xe992,
+        (false, false, 1..=33) => 0xe993,
+        (false, false, 34..=66) => 0xe994,
+        _ => 0xe995,
+    }
+}
+
 impl App {
     fn child(
         &mut self,
@@ -280,7 +293,23 @@ impl App {
         self.controls.clear();
         self.devices.clear();
         self.spatial.clear();
+        self.group_mutes.clear();
         self.items.clear();
+    }
+
+    /// Shows each group's mute state on its heading button.
+    pub(super) fn update_group_mutes(&self) {
+        for mute in &self.group_mutes {
+            if let Ok((level, muted)) = mute.volume.read() {
+                unsafe {
+                    crate::appearance::set_glyph(
+                        mute.button,
+                        endpoint_glyph(mute.input, level, muted),
+                    );
+                    crate::appearance::set_flag(mute.button, muted);
+                }
+            }
+        }
     }
 
     pub(super) fn update_control(&mut self, index: usize) {

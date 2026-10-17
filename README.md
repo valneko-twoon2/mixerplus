@@ -20,7 +20,7 @@
 ## Features
 
 - **One click away**: click the tray icon to adjust the default output and input, and each app separately. Every slider shows its value and a live level meter.
-- **Mute any app**: click its icon.
+- **Mute with one click**: the icon in the output or input heading mutes the default device; an app's icon mutes that app.
 - **Device switching**: the output and input sections show the default device; their chevron expands them to every device, where you choose the default and set each device's own volume. Each section stays open or closed as you left it, and the expanded output section also offers spatial sound (Windows Sonic for Headphones).
 - **Scrolling**: when many apps play sound, scroll the mixer with the mouse wheel or drag the scroll bar.
 - **Presets**: save the current volumes and mute states (output, input, every app) under a name and apply them later with one click. Nothing is applied automatically.
