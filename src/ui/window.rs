@@ -128,8 +128,8 @@ pub(super) unsafe extern "system" fn window_proc(
                     app.animate();
                     Ok(())
                 }
-                WM_TIMER if wparam.0 == SCROLL_TIMER => {
-                    app.scroll_step();
+                SCROLL_FRAME => {
+                    app.scroll_frame();
                     Ok(())
                 }
                 WM_TIMER if wparam.0 == TRANSITION_TIMER => {

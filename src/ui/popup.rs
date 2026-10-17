@@ -129,6 +129,7 @@ impl App {
             crate::appearance::set_edit_frame(None);
             self.list_rows = (((height - 210.0) / 42.0) as usize).max(1);
             self.scroll = 0;
+            self.glide = None;
             self.wheel_rest = 0;
             self.list_offset = 0;
             self.refresh(true)?;

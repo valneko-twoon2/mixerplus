@@ -166,6 +166,30 @@ impl Endpoint {
     fn sessions(&self) -> Option<IAudioSessionManager2> {
         self.activate(&self.sessions)
     }
+
+    /// The peak meter, except for an input nobody records from: Windows then keeps
+    /// reporting the last peak, so the level would stay up after recording stops.
+    fn live_meter(&self, flow: EDataFlow) -> Option<IAudioMeterInformation> {
+        (flow != eCapture || self.recording()).then(|| self.meter())?
+    }
+
+    /// Whether any application has an active session on this endpoint.
+    fn recording(&self) -> bool {
+        let Some(manager) = self.sessions() else {
+            return false;
+        };
+        unsafe {
+            let Ok(sessions) = manager.GetSessionEnumerator() else {
+                return false;
+            };
+            (0..sessions.GetCount().unwrap_or(0)).any(|i| {
+                sessions
+                    .GetSession(i)
+                    .and_then(|session| session.GetState())
+                    .is_ok_and(|state| state == AudioSessionStateActive)
+            })
+        }
+    }
 }
 
 /// Active endpoints and defaults of both flows. Asking audiosrv for the default
@@ -339,7 +363,7 @@ impl Audio {
                 selected: endpoint.id == *default,
                 form: endpoint.form,
                 volume: endpoint.volume().map(Volume::Endpoint),
-                meter: endpoint.meter(),
+                meter: endpoint.live_meter(flow),
             })
             .collect())
     }
@@ -360,7 +384,7 @@ impl Audio {
             name: endpoint.name.clone(),
             volume: Volume::Endpoint(volume),
             icon_path: None,
-            meters: endpoint.meter().into_iter().collect(),
+            meters: endpoint.live_meter(flow).into_iter().collect(),
             process: String::new(),
         })
     }

@@ -162,6 +162,7 @@ unsafe fn run_initialized() -> Result<()> {
             items: Vec::new(),
             scroll: 0,
             scroll_target: 0,
+            glide: None,
             content_height: 0,
             viewport_height: 0,
             wheel_rest: 0,

@@ -63,6 +63,8 @@ const COMMIT_EDIT: u32 = WM_APP + 5;
 const SHOW_ABOUT: u32 = WM_APP + 6;
 /// Sent after the dialog manager has moved focus with the keyboard.
 const TAB_KEY: u32 = WM_APP + 7;
+/// Posted once per display refresh while the mixer glides.
+const SCROLL_FRAME: u32 = WM_APP + 8;
 const EM_SETSEL: u32 = 0xb1;
 const EM_SETLIMITTEXT: u32 = 0xc5;
 const ES_AUTOHSCROLL_STYLE: u32 = 0x80;
@@ -71,7 +73,6 @@ const TRAY_TIMER: usize = 2;
 const ANIMATION_TIMER: usize = 3;
 const METER_TIMER: usize = 4;
 const TRANSITION_TIMER: usize = 5;
-const SCROLL_TIMER: usize = 6;
 /// Logical width of the strip at the popup's right edge that holds the scroll bar.
 const SCROLLBAR_WIDTH: i32 = 8;
 const METER_INTERVAL_MS: u32 = 33;
@@ -262,6 +263,14 @@ struct Track {
     thumb_bottom: i32,
 }
 
+/// A wheel or page scroll easing from `from` to `to` physical pixels.
+#[derive(Clone, Copy)]
+struct Glide {
+    from: i32,
+    to: i32,
+    start: Instant,
+}
+
 /// A scroll bar drag: the pointer and thumb tops when the thumb was grabbed.
 #[derive(Clone, Copy)]
 struct Drag {
@@ -325,6 +334,7 @@ struct App {
     /// physical pixels.
     scroll: i32,
     scroll_target: i32,
+    glide: Option<Glide>,
     /// Physical heights of all mixer content and of its visible part.
     content_height: i32,
     viewport_height: i32,
@@ -415,7 +425,7 @@ impl Drop for App {
             let _ = KillTimer(Some(self.hwnd), ANIMATION_TIMER);
             let _ = KillTimer(Some(self.hwnd), METER_TIMER);
             let _ = KillTimer(Some(self.hwnd), TRANSITION_TIMER);
-            let _ = KillTimer(Some(self.hwnd), SCROLL_TIMER);
+            scroll::stop_pacing();
             let _ = Shell_NotifyIconW(NIM_DELETE, &self.tray_data());
             let _ = DestroyWindow(self.hwnd);
             let _ = DestroyIcon(self.icon);

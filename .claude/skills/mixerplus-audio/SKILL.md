@@ -22,7 +22,9 @@ description: Rules for mixerplus Core Audio work - COM lifetime, endpoint and se
   a Windows thread); the popup's opening and `set_default` call `Audio::forget`.
   Sessions are still enumerated on every refresh.
 - Peak levels come from `IAudioMeterInformation`, one per endpoint or session;
-  `Row::peak` returns the maximum. Meters are plain reads and never change audio.
+  `Row::peak` returns the maximum. An input's meter keeps its last peak once nobody
+  records, so capture endpoints offer a meter only while a session on them is active
+  (`Endpoint::live_meter`), checked on each refresh. Meters are plain reads and never change audio.
 - Presets capture and apply through `Audio::capture_preset` and `apply_preset`;
   see `mixerplus-presets` for matching and failure rules.
 - Keep undocumented PolicyConfig calls isolated in `audio.rs`; the ten vtable

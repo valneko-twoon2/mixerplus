@@ -1,12 +1,50 @@
 //! Pixel scrolling of the mixer rows inside the viewport, and the popup's scroll bar.
 
 use super::*;
+use std::sync::atomic::{AtomicBool, Ordering};
+use windows::Win32::Graphics::Dwm::DwmFlush;
 
 /// Logical padding above the first mixer row and below the last.
 pub(super) const CONTENT_TOP: i32 = 8;
 const CONTENT_BOTTOM: i32 = 8;
 /// Logical distance one wheel notch scrolls, about one row like the shell flyout.
 const NOTCH: i32 = 48;
+/// How long a wheel or page scroll eases out.
+const GLIDE_MS: f32 = 200.0;
+
+/// Whether the frame pacing thread should keep running.
+static PACING: AtomicBool = AtomicBool::new(false);
+
+/// Posts `SCROLL_FRAME` once per desktop composition until pacing stops. Timer
+/// messages arrive every 15.6 ms out of step with the display, which made glides stutter.
+fn start_pacing(hwnd: HWND) {
+    if PACING.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    // Window handles are plain values; the thread only posts to the popup.
+    let target = hwnd.0 as isize;
+    let started = std::thread::Builder::new()
+        .name("scroll pacing".into())
+        .spawn(move || {
+            while PACING.load(Ordering::Acquire) {
+                if unsafe { DwmFlush() }.is_err() {
+                    std::thread::sleep(std::time::Duration::from_millis(16));
+                }
+                let hwnd = HWND(target as *mut _);
+                if unsafe { PostMessageW(Some(hwnd), SCROLL_FRAME, WPARAM(0), LPARAM(0)) }.is_err()
+                {
+                    PACING.store(false, Ordering::Release);
+                }
+            }
+        });
+    if started.is_err() {
+        PACING.store(false, Ordering::Release);
+    }
+}
+
+pub(super) fn stop_pacing() {
+    PACING.store(false, Ordering::Release);
+}
 
 /// Forwards the viewport's child notifications to the popup, which owns the rows.
 pub(super) unsafe extern "system" fn viewport_proc(
@@ -120,29 +158,44 @@ impl App {
         true
     }
 
-    /// Eases the rows toward `target`, or jumps there when animations are off.
+    /// Eases the rows toward `target`, or jumps there when animations are off. A new
+    /// target restarts the ease from the current position.
     fn glide_to(&mut self, target: i32) {
         self.scroll_target = target.clamp(0, self.max_scroll());
         if !animations_enabled() {
             self.scroll_to(self.scroll_target);
             return;
         }
-        unsafe {
-            SetTimer(Some(self.hwnd), SCROLL_TIMER, 10, None);
+        self.glide = Some(Glide {
+            from: self.scroll,
+            to: self.scroll_target,
+            start: Instant::now(),
+        });
+        start_pacing(self.hwnd);
+    }
+
+    /// Places the rows where the glide is at this display frame.
+    pub(super) fn scroll_frame(&mut self) {
+        let Some(glide) = self.glide else {
+            stop_pacing();
+            return;
+        };
+        let progress = (glide.start.elapsed().as_secs_f32() * 1000.0 / GLIDE_MS).min(1.0);
+        let position =
+            glide.from + ((glide.to - glide.from) as f32 * ease_out(progress)).round() as i32;
+        self.scroll_to(position);
+        if progress >= 1.0 || self.view != View::Mixer {
+            self.glide = None;
+            self.scroll_target = self.scroll;
+            stop_pacing();
         }
     }
 
-    /// One step of the wheel glide: a fixed share of the remaining distance.
-    pub(super) fn scroll_step(&mut self) {
-        let remaining = self.scroll_target - self.scroll;
-        let step = (remaining as f32 * 0.3).round() as i32;
-        let step = if step == 0 { remaining.signum() } else { step };
-        if step == 0 || !self.scroll_to(self.scroll + step) {
-            self.scroll_target = self.scroll;
-            unsafe {
-                let _ = KillTimer(Some(self.hwnd), SCROLL_TIMER);
-            }
-        }
+    /// Stops a running glide where it is.
+    pub(super) fn stop_glide(&mut self) {
+        self.glide = None;
+        self.scroll_target = self.scroll;
+        stop_pacing();
     }
 
     /// Scrolls the mixer for a wheel movement; positive deltas scroll toward the top.
@@ -163,6 +216,7 @@ impl App {
         };
         let top = self.px(item.top - CONTENT_TOP);
         let bottom = self.px(item.top + item.height + CONTENT_BOTTOM);
+        self.stop_glide();
         if top < self.scroll {
             self.scroll_to(top);
         } else if bottom > self.scroll + self.viewport_height {
@@ -272,6 +326,7 @@ impl App {
             let room = (track.bottom - track.top) - (track.thumb_bottom - track.thumb_top);
             let thumb = (drag.thumb + y - drag.pointer - track.top).clamp(0, room.max(0));
             let target = self.max_scroll() * thumb / room.max(1);
+            self.stop_glide();
             self.scroll_to(target);
             self.scroll_target = self.scroll;
             return Ok(());

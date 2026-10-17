@@ -29,8 +29,8 @@ description: Rules for mixerplus's Win32 tray icon and popup - child controls, c
   addition.
 - Views: `View::Presets` (see `mixerplus-presets`) and `View::Mixer`: endpoint rows,
   each with a chevron that expands its default-device list (a volume slider per
-  device) inline, then the section header and application rows. An expanded group is
-  titled above its default row (出力デバイス, 入力デバイス). The expanded output list
+  device) inline, then the section header and application rows. Each group is titled
+  above its default row (出力デバイス, 入力デバイス), expanded or not. The expanded output list
   ends with the output's spatial sound formats (立体音響). The group after an expanded
   list starts with a divider so output and input stay apart. The expanded
   state is remembered in `settings.json` (`settings.rs`). View changes and chevron
@@ -38,8 +38,10 @@ description: Rules for mixerplus's Win32 tray icon and popup - child controls, c
 - Row controls are children of the viewport (`ui/scroll.rs`), a control-parent child
   window at the popup's client origin that clips them and forwards their notifications
   to the popup; the footer link stays a direct child. The mixer scrolls by pixels with
-  `ScrollWindowEx` and never rebuilds to scroll; the wheel glides with an ease-out
-  timer. Sliders pass the wheel to the popup, so it scrolls instead of changing volume,
+  `ScrollWindowEx` and never rebuilds to scroll (about 1 ms per step). Wheel and page
+  scrolls ease out over time; a thread waits on `DwmFlush` and posts `SCROLL_FRAME`
+  once per display refresh, since 15.6 ms timer ticks out of step with the display
+  stuttered. Sliders pass the wheel to the popup, so it scrolls instead of changing volume,
   as in the shell flyout. After Tab, `TAB_KEY` scrolls the focused row into view.
   Captures clip viewport children to it, and the viewport paints the dividers and the
   text box frame like the popup.

@@ -68,6 +68,14 @@ impl App {
                     for (device, (item, old)) in devices.zip(&mut self.devices) {
                         unsafe { crate::appearance::set_flag(*item, device.selected) };
                         old.selected = device.selected;
+                        // An input's meter comes and goes as applications record.
+                        if let Some(control) = self
+                            .controls
+                            .iter_mut()
+                            .find(|c| c.kind == Kind::Device && c.row.key == device.id)
+                        {
+                            control.row.meters = device.meter.clone().into_iter().collect();
+                        }
                     }
                     if let Some(spatial) = &state.spatial {
                         for (button, format) in &self.spatial {
@@ -192,34 +200,30 @@ impl App {
             if !input {
                 self.spatial_device = row.key.clone();
             }
-            // An expanded group is titled above its default row, like the shell's pages.
-            if expanded {
-                self.heading(
-                    if input {
-                        "入力デバイス"
-                    } else {
-                        "出力デバイス"
-                    },
-                    after_list,
-                )?;
-            }
-            let divided = after_list && !expanded;
-            let (height, top) = if divided { (53, 9) } else { (44, 0) };
-            self.item(height, divided.then_some(4), |app| {
+            // Each group is titled above its default row, like the shell's pages.
+            self.heading(
+                if input {
+                    "入力デバイス"
+                } else {
+                    "出力デバイス"
+                },
+                after_list,
+            )?;
+            self.item(44, None, |app| {
                 let i = app.controls.len();
                 let mute = app.button(
                     "",
                     ROW_ID + i * 3 + 1,
-                    [8, top + 4, 40, 36],
+                    [8, 4, 40, 36],
                     icon,
                     pack(GLYPH, 0, false),
                 )?;
-                let slider = app.slider(ROW_ID + i * 3, [52, top + 6, 216, 32])?;
-                let value = app.label("", [268, top + 4, 40, 36], body, SECONDARY)?;
+                let slider = app.slider(ROW_ID + i * 3, [52, 6, 216, 32])?;
+                let value = app.label("", [268, 4, 40, 36], body, SECONDARY)?;
                 let chevron = app.button(
                     "",
                     ROW_ID + i * 3 + 2,
-                    [308, top + 4, 40, 36],
+                    [308, 4, 40, 36],
                     icon,
                     pack(
                         GLYPH,
