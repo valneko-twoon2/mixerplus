@@ -199,6 +199,11 @@ pub(super) unsafe extern "system" fn window_proc(
                 {
                     app.refresh(false)
                 }
+                WM_EXITSIZEMOVE if app.pinned => {
+                    // The popup was dragged.
+                    app.save_pin();
+                    Ok(())
+                }
                 WM_ACTIVATE if wparam.0 & 0xffff == WA_INACTIVE as usize && !app.pinned => {
                     app.dismiss();
                     Ok(())

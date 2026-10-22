@@ -26,6 +26,10 @@ pub struct Settings {
     pub show_outputs: bool,
     /// Whether the input device list is expanded under the input row.
     pub show_inputs: bool,
+    /// Whether the popup floats on top and can be dragged.
+    pub pinned: bool,
+    /// Where the floating popup's top-left corner was left, in screen coordinates.
+    pub position: Option<(i32, i32)>,
 }
 
 impl Settings {
@@ -46,17 +50,32 @@ impl Settings {
                 .and_then(Json::as_bool)
                 .unwrap_or(false)
         };
+        let coordinate = |key| {
+            json.as_ref()
+                .and_then(|json| json.get(key))
+                .and_then(Json::as_f64)
+                .filter(|value| value.abs() < 1.0e6)
+                .map(|value| value as i32)
+        };
         Self {
             show_outputs: flag("ShowOutputDevices"),
             show_inputs: flag("ShowInputDevices"),
+            pinned: flag("PopupPinned"),
+            position: coordinate("PopupX").zip(coordinate("PopupY")),
         }
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
-        let json = Json::Object(vec![
+        let mut entries = vec![
             ("ShowOutputDevices".into(), Json::Bool(self.show_outputs)),
             ("ShowInputDevices".into(), Json::Bool(self.show_inputs)),
-        ]);
+            ("PopupPinned".into(), Json::Bool(self.pinned)),
+        ];
+        if let Some((x, y)) = self.position {
+            entries.push(("PopupX".into(), Json::Number(x as f64)));
+            entries.push(("PopupY".into(), Json::Number(y as f64)));
+        }
+        let json = Json::Object(entries);
         if let Some(folder) = path.parent() {
             std::fs::create_dir_all(folder)?;
         }
@@ -99,6 +118,10 @@ mod tests {
         settings.save(&path).unwrap();
         let loaded = Settings::load(&path);
         assert!(loaded.show_inputs && !loaded.show_outputs);
+        settings.pinned = true;
+        settings.position = Some((-1500, 240));
+        settings.save(&path).unwrap();
+        assert_eq!(Settings::load(&path), settings);
         let _ = std::fs::remove_dir_all(&folder);
     }
 }

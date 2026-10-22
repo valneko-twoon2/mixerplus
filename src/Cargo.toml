@@ -1,6 +1,6 @@
 [package]
 name = "mixerplus"
-version = "1.0.2"
+version = "1.0.3"
 edition = "2024"
 description = "A compact Windows tray volume mixer"
 license = "MIT"

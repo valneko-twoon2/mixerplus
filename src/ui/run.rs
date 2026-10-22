@@ -108,6 +108,16 @@ unsafe fn run_initialized() -> Result<()> {
         if RegisterClassW(&viewport) == 0 {
             return Err(windows::core::Error::from_thread());
         }
+        let settings_path = Settings::default_path();
+        let settings = settings_path
+            .as_deref()
+            .map(Settings::load)
+            .unwrap_or_default();
+        // A pinned popup starts where it was left; it is kept on a monitor when shown.
+        let (start_x, start_y) = settings
+            .position
+            .filter(|_| settings.pinned)
+            .unwrap_or((0, 0));
         let inspect = std::env::args().any(|arg| arg == "--inspect-ui");
         let hwnd = CreateWindowExW(
             if inspect {
@@ -124,8 +134,8 @@ unsafe fn run_initialized() -> Result<()> {
             } else {
                 WS_POPUP | WS_CLIPCHILDREN
             },
-            0,
-            0,
+            start_x,
+            start_y,
             crate::config::POPUP_WIDTH,
             400,
             None,
@@ -159,7 +169,6 @@ unsafe fn run_initialized() -> Result<()> {
         )
         .is_ok();
         let icon = tray_icon()?;
-        let settings_path = Settings::default_path();
         let app = App {
             audio: Audio::new()?,
             hwnd,
@@ -203,10 +212,8 @@ unsafe fn run_initialized() -> Result<()> {
                 PresetStore::default_path()
                     .unwrap_or_else(|| std::env::temp_dir().join("mixerplus-presets.json")),
             ),
-            settings: settings_path
-                .as_deref()
-                .map(Settings::load)
-                .unwrap_or_default(),
+            pinned: settings.pinned,
+            settings,
             settings_path,
             refocus: None,
             listed: Vec::new(),
@@ -217,7 +224,6 @@ unsafe fn run_initialized() -> Result<()> {
             transition: None,
             target: None,
             dismissed: None,
-            pinned: false,
             pin_button: HWND::default(),
         };
         APP.with(|state| *state.borrow_mut() = Some(app));

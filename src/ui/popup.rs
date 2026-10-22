@@ -239,10 +239,31 @@ impl App {
         }
     }
 
+    /// Remembers whether the popup is pinned, and where, for the next start.
+    pub(super) fn save_pin(&mut self) {
+        self.settings.pinned = self.pinned;
+        if self.pinned {
+            let mut rect = RECT::default();
+            if unsafe { GetWindowRect(self.hwnd, &mut rect) }.is_ok() {
+                self.settings.position = Some((rect.left, rect.top));
+            }
+        }
+        if let Some(path) = &self.settings_path {
+            // An unsaved preference only lasts until exit; it is not worth an error.
+            let _ = self.settings.save(path);
+        }
+    }
+
     /// Switches between the anchored popup and the floating one.
     pub(super) fn toggle_pin(&mut self) -> Result<()> {
         self.pinned = !self.pinned;
         self.show_pin();
+        let result = self.place_pinned();
+        self.save_pin();
+        result
+    }
+
+    fn place_pinned(&mut self) -> Result<()> {
         unsafe {
             if self.pinned {
                 // Settle at once; a slide in progress would carry on to the corner.
