@@ -21,6 +21,7 @@
 ## Features
 
 - **One click away**: click the tray icon, or press Win+Alt+V, to adjust the default output and input, and each app separately. Every slider shows its value and a live level meter.
+- **Pin it anywhere**: the pin button at the bottom lets you drag the popup wherever you like. It then stays on top and open until you close it.
 - **Mute with one click**: the icon in the output or input heading mutes the default device; an app's icon mutes that app.
 - **Device switching**: the output and input sections show the default device; their chevron expands them to every device, where you choose the default and set each device's own volume. Each section stays open or closed as you left it, and the expanded output section also offers spatial sound (Windows Sonic for Headphones).
 - **Scrolling**: when many apps play sound, scroll the mixer with the mouse wheel or drag the scroll bar.

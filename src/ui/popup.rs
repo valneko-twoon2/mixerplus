@@ -21,6 +21,14 @@ pub(super) fn popup_position(
     )
 }
 
+/// Moves a popup of this size the least that puts it inside `work`.
+pub(super) fn keep_within(work: RECT, x: i32, y: i32, width: i32, height: i32) -> (i32, i32) {
+    (
+        x.clamp(work.left, (work.right - width).max(work.left)),
+        y.clamp(work.top, (work.bottom - height).max(work.top)),
+    )
+}
+
 pub(crate) fn animations_enabled() -> bool {
     let mut enabled = BOOL(1);
     unsafe {
@@ -80,6 +88,15 @@ impl App {
                     y: rect.top,
                 };
             }
+            if self.pinned {
+                // A pinned popup reopens where it was left.
+                let mut rect = RECT::default();
+                GetWindowRect(self.hwnd, &mut rect)?;
+                point = POINT {
+                    x: (rect.left + rect.right) / 2,
+                    y: (rect.top + rect.bottom) / 2,
+                };
+            }
             let monitor_handle = MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST);
             let mut monitor = MONITORINFO {
                 cbSize: size_of::<MONITORINFO>() as u32,
@@ -87,15 +104,17 @@ impl App {
             };
             GetMonitorInfoW(monitor_handle, &mut monitor).ok()?;
             // Move to the target monitor before measuring its effective DPI.
-            SetWindowPos(
-                self.hwnd,
-                None,
-                monitor.rcWork.left,
-                monitor.rcWork.top,
-                0,
-                0,
-                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
-            )?;
+            if !self.pinned {
+                SetWindowPos(
+                    self.hwnd,
+                    None,
+                    monitor.rcWork.left,
+                    monitor.rcWork.top,
+                    0,
+                    0,
+                    SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+                )?;
+            }
             let mut scale = GetDpiForWindow(self.hwnd).max(96) as f32 / 96.0;
             let arguments: Vec<_> = std::env::args().collect();
             let diagnostic = arguments
@@ -144,9 +163,14 @@ impl App {
             GetWindowRect(self.hwnd, &mut rect)?;
             let target = rect.top;
             let start = self.hidden_top(rect.bottom - rect.top);
-            let animate = !diagnostic && animations_enabled() && start != target;
-            // Below the taskbar in z-order, the popup slides out from behind it.
-            let after = taskbar_for(monitor_handle).unwrap_or(HWND_TOPMOST);
+            let animate = !diagnostic && !self.pinned && animations_enabled() && start != target;
+            // Below the taskbar in z-order, the popup slides out from behind it. A pinned
+            // popup is above everything.
+            let after = if self.pinned {
+                HWND_TOPMOST
+            } else {
+                taskbar_for(monitor_handle).unwrap_or(HWND_TOPMOST)
+            };
             SetWindowPos(
                 self.hwnd,
                 Some(after),
@@ -200,8 +224,73 @@ impl App {
         }
     }
 
-    /// Slides the popup back behind the taskbar, then hides it.
+    /// Takes the work area and monitor rectangles from the monitor the popup is on.
+    pub(super) fn sync_monitor(&mut self) {
+        unsafe {
+            let mut monitor = MONITORINFO {
+                cbSize: size_of::<MONITORINFO>() as u32,
+                ..Default::default()
+            };
+            let handle = MonitorFromWindow(self.hwnd, MONITOR_DEFAULTTONEAREST);
+            if GetMonitorInfoW(handle, &mut monitor).as_bool() {
+                self.work_area = monitor.rcWork;
+                self.monitor = monitor.rcMonitor;
+            }
+        }
+    }
+
+    /// Switches between the anchored popup and the floating one.
+    pub(super) fn toggle_pin(&mut self) -> Result<()> {
+        self.pinned = !self.pinned;
+        self.show_pin();
+        unsafe {
+            if self.pinned {
+                // Settle at once; a slide in progress would carry on to the corner.
+                self.animation = None;
+                let _ = KillTimer(Some(self.hwnd), ANIMATION_TIMER);
+                SetWindowPos(
+                    self.hwnd,
+                    Some(HWND_TOPMOST),
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                )?;
+                return Ok(());
+            }
+            // Back to the corner next to the taskbar.
+            self.sync_monitor();
+            let mut rect = RECT::default();
+            GetWindowRect(self.hwnd, &mut rect)?;
+            let (x, y) = popup_position(
+                self.work_area,
+                self.monitor,
+                rect.right - rect.left,
+                rect.bottom - rect.top,
+                self.px(12),
+            );
+            let after = taskbar_for(MonitorFromWindow(self.hwnd, MONITOR_DEFAULTTONEAREST))
+                .unwrap_or(HWND_TOPMOST);
+            SetWindowPos(
+                self.hwnd,
+                Some(after),
+                x,
+                y,
+                0,
+                0,
+                SWP_NOSIZE | SWP_NOACTIVATE,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Slides the popup back behind the taskbar, then hides it. A pinned popup just hides.
     pub(super) fn dismiss(&mut self) {
+        if self.pinned {
+            self.hide_now();
+            return;
+        }
         self.end_transition();
         unsafe {
             if !IsWindowVisible(self.hwnd).as_bool()
@@ -291,6 +380,19 @@ mod tests {
             ..work
         };
         assert_eq!(popup_position(work, monitor, 436, 510, 12), (-448, 518));
+    }
+
+    #[test]
+    fn dragged_popup_is_kept_on_its_monitor() {
+        let work = RECT {
+            left: 0,
+            top: 0,
+            right: 1920,
+            bottom: 1040,
+        };
+        assert_eq!(keep_within(work, 1800, 900, 360, 400), (1560, 640));
+        assert_eq!(keep_within(work, -50, -20, 360, 400), (0, 0));
+        assert_eq!(keep_within(work, 100, 200, 360, 400), (100, 200));
     }
 
     #[test]

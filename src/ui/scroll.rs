@@ -70,6 +70,9 @@ pub(super) unsafe extern "system" fn viewport_proc(
                 LRESULT(0)
             }
             WM_ERASEBKGND => LRESULT(1),
+            // Empty parts of the viewport belong to the popup, so a pinned popup can be
+            // dragged by them.
+            WM_NCHITTEST => LRESULT(HTTRANSPARENT as isize),
             WM_COMMAND | WM_HSCROLL | WM_DRAWITEM | WM_CTLCOLORSTATIC | WM_CTLCOLOREDIT
             | WM_NOTIFY | WM_MOUSEWHEEL => match GetParent(hwnd) {
                 Ok(parent) => SendMessageW(parent, message, Some(wparam), Some(lparam)),

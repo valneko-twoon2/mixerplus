@@ -37,7 +37,7 @@ mod views;
 mod window;
 
 pub(crate) use popup::animations_enabled;
-use popup::popup_position;
+use popup::{keep_within, popup_position};
 pub use run::{check_audio, run, show_error};
 use tray::tray_icon;
 use window::window_proc;
@@ -62,6 +62,8 @@ const OUTPUT_MUTE: usize = 22;
 const INPUT_MUTE: usize = 23;
 const PRESETS_BUTTON: usize = 17;
 const NEW_PRESET: usize = 18;
+/// Toggles free movement and keeping the popup on top.
+const PIN: usize = 24;
 /// Each preset row uses four IDs: apply, favorite, rename, and delete.
 const PRESET_ID: usize = 3000;
 const COMMIT_EDIT: u32 = WM_APP + 5;
@@ -102,6 +104,8 @@ const DELETE_GLYPH: u16 = 0xe74d;
 const CONFIRM_GLYPH: u16 = 0xe73e;
 const CHEVRON_DOWN: u16 = 0xe70d;
 const CHEVRON_UP: u16 = 0xe70e;
+const PIN_GLYPH: u16 = 0xe718;
+const PINNED_GLYPH: u16 = 0xe841;
 
 thread_local! {
     static APP: RefCell<Option<App>> = const { RefCell::new(None) };
@@ -390,6 +394,11 @@ struct App {
     target: Option<RECT>,
     /// When the popup last started closing, to make a tray click toggle it.
     dismissed: Option<Instant>,
+    /// Whether the popup floats: it can be dragged anywhere, stays above other windows,
+    /// and stays open when it loses focus. Only for the running session.
+    pinned: bool,
+    /// The footer button that toggles `pinned`.
+    pin_button: HWND,
 }
 
 fn wide(text: &str) -> Vec<u16> {

@@ -453,9 +453,26 @@ impl App {
                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
                 )?;
             }
+            SetWindowPos(
+                self.pin_button,
+                None,
+                self.px(308),
+                self.px(footer + 8),
+                0,
+                0,
+                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+            )?;
             let width = self.px(crate::config::POPUP_WIDTH);
             let height = self.px(footer + 48);
-            let (x, y) = popup_position(self.work_area, self.monitor, width, height, self.px(12));
+            let (x, y) = if self.pinned {
+                // Stay where the user put the popup, keeping it within its monitor.
+                self.sync_monitor();
+                let mut rect = RECT::default();
+                GetWindowRect(self.hwnd, &mut rect)?;
+                keep_within(self.work_area, rect.left, rect.top, width, height)
+            } else {
+                popup_position(self.work_area, self.monitor, width, height, self.px(12))
+            };
             let (x, y) = match &mut self.animation {
                 // Keep sliding; only the destination moves with the new height.
                 Some(animation) if !animation.closing => {

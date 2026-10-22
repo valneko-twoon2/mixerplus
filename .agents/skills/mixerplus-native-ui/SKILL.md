@@ -75,6 +75,12 @@ description: Rules for mixerplus's Win32 tray icon and popup - child controls, c
   from behind it with ease-out, then back with ease-in; animations follow the
   Windows client-area animation setting. A tray click within 400 ms of a
   dismissal toggles the popup closed instead of reopening it.
+- The pin button in the footer (`PIN`, `App::pinned`, session only) floats the popup: any
+  part that is not a control or the scroll bar is `HTCAPTION` (`WM_NCHITTEST`; the viewport
+  is `HTTRANSPARENT`), so it can be dragged; it is `HWND_TOPMOST` above the taskbar, does not
+  slide, and stays open when deactivated. Escape, the hotkey, and the tray icon still close it,
+  and it reopens where it was left, kept inside its monitor (`keep_within`). Unpinning moves
+  it back to the taskbar corner.
 
 ## Painting
 

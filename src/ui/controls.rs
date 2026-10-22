@@ -277,6 +277,15 @@ impl App {
         }
         self.header_windows = vec![title, keys];
         self.header = 0;
+        self.pin_button = self.button(
+            "",
+            PIN,
+            [308, 0, 40, 32],
+            self.fonts.icon,
+            pack(GLYPH, PIN_GLYPH, false),
+        )?;
+        self.tool(TTM_ADDTOOLW, self.pin_button, "");
+        self.show_pin();
         self.button(
             "その他の音量設定",
             SETTINGS_LINK,
@@ -286,6 +295,26 @@ impl App {
         )?;
         self.chrome_count = self.children.len();
         Ok(())
+    }
+
+    /// Shows `pinned` on the footer button: a filled pin in the accent color.
+    pub(super) fn show_pin(&self) {
+        unsafe {
+            crate::appearance::set_glyph(
+                self.pin_button,
+                if self.pinned { PINNED_GLYPH } else { PIN_GLYPH },
+            );
+            crate::appearance::set_flag(self.pin_button, self.pinned);
+        }
+        self.tool(
+            TTM_UPDATETIPTEXTW,
+            self.pin_button,
+            if self.pinned {
+                "固定を解除"
+            } else {
+                "固定して自由に移動"
+            },
+        );
     }
 
     /// Shows the pinned header with this logical `height`, or hides it for 0.

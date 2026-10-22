@@ -217,6 +217,8 @@ unsafe fn run_initialized() -> Result<()> {
             transition: None,
             target: None,
             dismissed: None,
+            pinned: false,
+            pin_button: HWND::default(),
         };
         APP.with(|state| *state.borrow_mut() = Some(app));
         if SetTimer(

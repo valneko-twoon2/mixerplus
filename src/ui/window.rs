@@ -35,6 +35,28 @@ pub(super) unsafe extern "system" fn window_proc(
             WM_CTLCOLORSTATIC => {
                 return crate::appearance::text_background(HDC(wparam.0 as *mut _));
             }
+            WM_NCHITTEST => {
+                // A pinned popup is dragged by any part of it that is not a control or
+                // the scroll bar.
+                let floating = APP.with(|state| {
+                    state
+                        .try_borrow()
+                        .ok()
+                        .and_then(|state| state.as_ref().map(|app| (app.pinned, app.scale)))
+                });
+                if let Some((true, scale)) = floating {
+                    let mut point = POINT {
+                        x: lparam.0 as i16 as i32,
+                        y: (lparam.0 >> 16) as i16 as i32,
+                    };
+                    let _ = ScreenToClient(hwnd, &mut point);
+                    let strip = ((crate::config::POPUP_WIDTH - SCROLLBAR_WIDTH) as f32 * scale)
+                        .round() as i32;
+                    if point.x < strip {
+                        return LRESULT(HTCAPTION as isize);
+                    }
+                }
+            }
             _ => {}
         }
         // Child creation and native menus can dispatch nested messages.
@@ -56,6 +78,14 @@ pub(super) unsafe extern "system" fn window_proc(
                         app.dismissed = None;
                         app.open()
                     }
+                }
+                TRAY if lparam.0 as u32 == WM_LBUTTONUP
+                    && app.pinned
+                    && IsWindowVisible(app.hwnd).as_bool() =>
+                {
+                    // A pinned popup keeps focus elsewhere, so the icon closes it.
+                    app.dismiss();
+                    Ok(())
                 }
                 TRAY if lparam.0 as u32 == WM_LBUTTONUP => {
                     // A click on the icon first deactivates an open popup; treat it as a toggle.
@@ -169,7 +199,7 @@ pub(super) unsafe extern "system" fn window_proc(
                 {
                     app.refresh(false)
                 }
-                WM_ACTIVATE if wparam.0 & 0xffff == WA_INACTIVE as usize => {
+                WM_ACTIVATE if wparam.0 & 0xffff == WA_INACTIVE as usize && !app.pinned => {
                     app.dismiss();
                     Ok(())
                 }
@@ -229,6 +259,7 @@ impl App {
                 }
                 self.update_group_mutes();
             }
+            PIN => self.toggle_pin()?,
             PRESETS_BUTTON => self.show_view(View::Presets)?,
             NEW_PRESET => {
                 self.edit = Some(EditState {
@@ -239,12 +270,12 @@ impl App {
             }
             id if id >= PRESET_ID => self.preset_command(id)?,
             SETTINGS_LINK => {
-                self.dismiss();
+                self.leave();
                 self.open_settings(w!("ms-settings:sound"))?;
             }
             MORE => {
                 // Like the shell flyout, the gear opens the volume mixer settings.
-                self.dismiss();
+                self.leave();
                 self.open_settings(w!("ms-settings:apps-volume"))?;
             }
             id if id >= SPATIAL_ID => {
@@ -293,6 +324,13 @@ impl App {
             _ => {}
         }
         Ok(())
+    }
+
+    /// Closes the popup before another window opens, unless it is pinned.
+    fn leave(&mut self) {
+        if !self.pinned {
+            self.dismiss();
+        }
     }
 
     /// Expands or collapses the device list under an endpoint row and remembers it.
