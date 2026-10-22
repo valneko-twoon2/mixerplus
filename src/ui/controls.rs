@@ -310,9 +310,9 @@ impl App {
             TTM_UPDATETIPTEXTW,
             self.pin_button,
             if self.pinned {
-                "固定を解除"
+                "最前面と自由移動を解除"
             } else {
-                "固定して自由に移動"
+                "最前面に表示して自由に移動"
             },
         );
     }
